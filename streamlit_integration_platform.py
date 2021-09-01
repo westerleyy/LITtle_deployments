@@ -100,6 +100,7 @@ if crosswalk is not None and recipes is not None and sales is not None and stock
                 cocktails_exception = sales_report[(sales_report['Sub Category'].isin(other_cocktails))].copy()
                 cocktails_exception = cocktails_exception[['Item', 'Number Sold']]
                 cocktails_exception = cocktails_exception[(~cocktails_exception.Item.isin(recipe_item_list))].dropna()
+                cocktails_exception = cocktails_exception.rename(columns = { 'Item': 'Food Item'})
                 
                 # calculating consumption from cocktails
                 cocktail_sales = sales_report[(sales_report['Sub Category'] == 'Cocktails')].copy()
@@ -168,17 +169,23 @@ if crosswalk is not None and recipes is not None and sales is not None and stock
                 orders_summary_xwalk.reset_index(inplace = True)
             
                 ## integrate with sales
+                ## integrate back with inventory to get bottle size
+                ## for now it is size ml but it has to change in future
                 bar_inventory_orders = bar_inventory.merge(orders_summary_xwalk, on = 'Label', how = "left")
                 bar_inventory_orders = bar_inventory_orders.fillna(0)
+                bar_inventory_orders = bar_inventory_orders.merge(inventory_df[['Label', 'Size ml']], how = "left")
             
                 # calculate estimated inventory
                 bar_inventory_orders = bar_inventory_orders.assign(
                     Estimated_Balance = lambda x: x.Opening + x.Net_Transfers + x.Qty - x.btl_sold
                 )
-                bar_inventory_orders = bar_inventory_orders.rename(columns = {'btl_sold':'Btl_Sold', 
+                bar_inventory_orders = bar_inventory_orders.rename(columns = {'Label': 'Item',
+                                                                              'btl_sold':'Qty_Sold', 
                                                                               'Qty':'Total_Ordered',
-                                                                              'Total': 'Total_Cost'})
-                bar_inventory_orders = bar_inventory_orders[['Label', 'Opening', 'Net_Transfers', 'Total_Ordered', 'Total_Cost', 'Unit_Price', 'Btl_Sold', 'Estimated_Balance']]
+                                                                              'Total': 'Total_Cost',
+                                                                              'Estimated_Balance': 'Expected_Balance',
+                                                                              'Size ml': 'Unit_Size'})
+                bar_inventory_orders = bar_inventory_orders[['Item', 'Unit_Size', 'Opening', 'Net_Transfers', 'Total_Ordered', 'Total_Cost', 'Unit_Price', 'Qty_Sold', 'Expected_Balance']]
                 
                 
                 return bar_inventory_orders, orders_summary, cocktails_exception
