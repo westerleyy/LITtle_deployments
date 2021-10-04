@@ -9,8 +9,7 @@ import streamlit as st
 import altair as alt
 from sentence_transformers import SentenceTransformer, util
 import torch
-import warnings
-warnings.simplefilter('ignore', FutureWarning)
+import plotly.express as px
 
 st.markdown("# Operation Tomatoes")
 st.markdown('from [foodrazor](https://www.foodrazor.com/) with ❤️')
@@ -31,6 +30,7 @@ csv_file_reader = {"csv": pd.read_csv}
 model_file_reader = {"file": torch.load}
 
 st.markdown('---')
+st.markdown('Click on the arrows on the top-right hand corner to expand the chart. Item(s) can be removed from the chart by clicking their name(s) in the legend.')
 
 if product_name is not None and model is not None and query is not None and model_list is not None:
     product_name_df = pd.read_csv(product_name)
@@ -51,23 +51,28 @@ if product_name is not None and model is not None and query is not None and mode
     
     # using the scores, identify the corresponding items ordered
     similar_items = []
-    print("\n\n======================\n\n")
-    print("Query:", query)
-    print("\nTop 20 most similar products ordered:")
     
     for idx in top_results[1]:
-        print(model_list_df[idx])
         similar_items.append(model_list_df[idx])
     
     similar_product_names = product_name_df[product_name_df.productname_cleaned.isin(similar_items)].copy()
     
     # plot the chart
     chart = alt.Chart(similar_product_names).mark_circle().encode(
-        x = alt.X('productname_cleaned', title = "Product"),
+        x = alt.X('productname', title = "Product"),
         y = alt.Y('amount', title = "Price"),
-        color = 'productname_cleaned',
-        tooltip = ['productname_cleaned']
+        color = 'productname',
+        tooltip = ['productname_cleaned', 'productname']
         ).interactive()
     
-    st.altair_chart(chart, use_container_width = True)
+    plot_title = 'Range of prices for ' + query
+    
+    plotly_chart = px.scatter(similar_product_names, x = 'productname', y = 'amount', color = 'productname', 
+                              title = plot_title,
+                              labels = {'productname': 'Product Ordered',
+                                        'amount': 'Unit Price ($)'})
+    
+    # st.altair_chart(chart, use_container_width = True)
+    
+    st.plotly_chart(plotly_chart, use_container_width = True)
     
