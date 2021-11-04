@@ -134,7 +134,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     # remove trailing white spaces and excessive whitespaces
     stock_in['Product Name'] = stock_in['Product Name'].apply(lambda x: x.rstrip())
-    stock_in['productname_cleaned'] = stock_in.productname.apply(lambda x: re.sub(r'\([^)]*\)', '', x))
+    stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: re.sub(r'\([^)]*\)', '', x))
     stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x))
     stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join(x.split()))
     stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join( [w for w in x.split() if len(w)>2] ))
