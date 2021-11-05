@@ -64,7 +64,7 @@ sbert_model = SentenceTransformer('stsb-mpnet-base-v2')
 
 st.markdown('---')
 
-if submit_button:
+if pos_data is not None and recipe_data is not None and stock_in_data is not None and pos_sheet_name is not None and recipe_sheet_name is not None:
     # import pos data
     pos_sheet_df = pd.read_excel(pos_data, skiprows = 6, sheet_name = pos_sheet_name)
     pos_sheet_df = pos_sheet_df.dropna(how = 'all')
