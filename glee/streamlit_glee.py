@@ -384,7 +384,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         inventory_tracking = inventory_tracking[['Product Ordered', 'Total Cost', 'Cost of Quantity Consumed', 'Cost of Estimated Balance', 'Attributable Revenue', 'ProfitMargin', 'Units Ordered', 'Quantity Ordered', 'Quantity Consumed', 'Estimated Balance']]
         new_cols_list = ['Actual Balance', 'Transfers']
         inventory_tracking_final = inventory_tracking.reindex(columns = [*inventory_tracking.columns.tolist(), *new_cols_list])
-    
+        
+        # delete encodings to solve resource limit problem
+        del sbert_model, recipe_item_embeddings, query_embedding, stock_in_embeddings
     
         
         if st.button('Download Inventory Reports as CSV'):
