@@ -20,6 +20,9 @@ st.markdown('---')
 st.markdown("## 📑 Data Upload")
 st.warning('🏮⚠️ *Note:* Please only upload the CSVs and XLSX provided. ⚠️🏮')
 
+
+
+
 with st.form(key = 'upload_form'):
     pos_data = st.file_uploader("📥 POS Data", type = 'xlsx')
     pos_sheet_name = st.text_input('POS Data Sheet Name:')
@@ -59,12 +62,15 @@ def download_link(object_to_download, download_filename, download_link_text):
 
     return f'<a href="data:file/txt;base64,{b64}" download="{download_filename}">{download_link_text}</a>'
 
-# initialize sbert
-sbert_model = SentenceTransformer('stsb-mpnet-base-v2')
+
 
 st.markdown('---')
 
 if pos_data is not None and recipe_data is not None and stock_in_data is not None and pos_sheet_name is not None and recipe_sheet_name is not None:
+    
+    # initialize sbert
+    sbert_model = SentenceTransformer('stsb-mpnet-base-v2')
+    
     # import pos data
     pos_sheet_df = pd.read_excel(pos_data, skiprows = 6, sheet_name = pos_sheet_name)
     pos_sheet_df = pos_sheet_df.dropna(how = 'all')
