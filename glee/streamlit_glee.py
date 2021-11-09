@@ -63,7 +63,6 @@ def download_link(object_to_download, download_filename, download_link_text):
     return f'<a href="data:file/txt;base64,{b64}" download="{download_filename}">{download_link_text}</a>'
 
 
-
 st.markdown('---')
 
 if pos_data is not None and recipe_data is not None and stock_in_data is not None and pos_sheet_name is not None and recipe_sheet_name is not None:
