@@ -33,6 +33,7 @@ with st.form(key = 'upload_form'):
     stock_in_data = st.file_uploader("📥 Stock-In Data", type = 'csv')
     category_exclusions = st.text_input('Categories to exclude from Stock-In (Comma-Separated):')
     category_exclusions = str(category_exclusions) 
+    corrected_stock_in_data = st.file_uploader("📥 Corrected Stock-In Data", type = 'csv')
     existing_inventory = st.file_uploader("📥 Starting Balance", type = 'csv')
     matched_ingredients_stock_in_amended = st.file_uploader("📥 Amended Ingredients to Stock-In Report", type = 'csv')
     matched_recipe_pos_amended = st.file_uploader("📥 Amended Recipe items to POS Report", type = 'csv')
@@ -68,7 +69,12 @@ st.markdown('---')
 if pos_data is not None and recipe_data is not None and stock_in_data is not None and pos_sheet_name is not None and recipe_sheet_name is not None:
     
     # initialize sbert
-    sbert_model = SentenceTransformer('stsb-mpnet-base-v2')
+    @st.cache
+    def load_transformer():
+        sbert_model = SentenceTransformer('stsb-mpnet-base-v2')
+        return sbert_model
+    
+    sbert_model = load_transformer()
     
     # import pos data
     pos_sheet_df = pd.read_excel(pos_data, skiprows = 6, sheet_name = pos_sheet_name)
@@ -86,20 +92,32 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
     del recipe_data
     
+    
+    # adjust unit price column
+    def names_cleaning(x):
+        x = re.sub(r'\([^)]*\)', '', x)
+        x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x)
+        x = ' '.join( [w for w in x.split() if len(w)>2] )
+        x = ' '.join(x.split())
+        x = x.upper()
+        return x
+    
     # upper case all and clean the ingredient names
     recipe_sheet_df['Food Item (As per POS system)'] = recipe_sheet_df.loc[:,'Food Item (As per POS system)'].str.upper()
-    recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.loc[:,'Ingredient Ordered (if known)'].str.upper()
-    recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: re.sub(r'\([^)]*\)', '', str(x)))
-    recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ",x))
+    recipe_sheet_df['Ingredient'] = recipe_sheet_df.loc[:,'Ingredient Ordered (if known)'].str.upper()
+    recipe_sheet_df['Ingredient'] = recipe_sheet_df.Ingredient.apply(lambda x: names_cleaning(str(x)))
+    
+    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: re.sub(r'\([^)]*\)', '', str(x)))
+    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ",x))
     
     ## drop single letters
     ## drop excessive whitespace
-    recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: ' '.join( [w for w in x.split() if len(w)>2] ))
-    recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: ' '.join(x.split()))
-    recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: x.upper())
+    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: ' '.join( [w for w in x.split() if len(w)>2] ))
+    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: ' '.join(x.split()))
+    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: x.upper())
     
     # get list of ingredients
-    recipe_ingredients_list = recipe_sheet_df['Ingredient_Upper'].drop_duplicates().tolist()
+    recipe_ingredients_list = recipe_sheet_df['Ingredient'].drop_duplicates().tolist()
     
     # detect similar menu items across recipe and pos sheets
     
@@ -107,7 +125,13 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     unique_recipe_items = recipe_sheet_df['Food Item (As per POS system)'].dropna().drop_duplicates().tolist()
     
     # encode recipe items
-    recipe_item_embeddings = sbert_model.encode(unique_recipe_items, convert_to_tensor = True)
+    
+    @st.cache
+    def recipe_item_embeddings_fn():
+        recipe_item_embeddings = sbert_model.encode(unique_recipe_items, convert_to_tensor = True)
+        return recipe_item_embeddings
+    
+    recipe_item_embeddings = recipe_item_embeddings_fn()
     
     # get unique menu items from POS
     pos_items = all_pos_cleaned['Article'].dropna().drop_duplicates().tolist()
@@ -144,11 +168,22 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     # remove trailing white spaces and excessive whitespaces
     stock_in['Product Name'] = stock_in['Product Name'].apply(lambda x: x.rstrip())
-    stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: re.sub(r'\([^)]*\)', '', x))
-    stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x))
-    stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join(x.split()))
-    stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join( [w for w in x.split() if len(w)>2] ))
-    stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: x.upper())
+    
+    def names_cleaning2(x):
+        x = re.sub(r'\([^)]*\)', '', x)
+        x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x)
+        x = ' '.join(x.split())
+        x = ' '.join( [w for w in x.split() if len(w)>2] )
+        x = x.upper()
+        return x
+    
+    stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: names_cleaning2(str(x)))    
+    
+    #stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: re.sub(r'\([^)]*\)', '', x))
+    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x))
+    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join(x.split()))
+    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join( [w for w in x.split() if len(w)>2] ))
+    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: x.upper())
     
     # adjust unit price column
     def unit_price_adjustment(x):
@@ -159,67 +194,89 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     stock_in['Unit Price'] = stock_in['Unit Price'].apply(lambda x: unit_price_adjustment(str(x)))
     
-    
-    
     # agg orders
-    stock_in_agg = stock_in[['productname_cleaned', 'Qty', 'Unit Price', 'unitSize']].copy()
-    stock_in_agg['total_quantity'] = stock_in_agg['Qty'] * stock_in_agg['unitSize']
+    stock_in_agg = stock_in[['productname_cleaned', 'Qty', 'Unit Price']].copy()
+    # stock_in_agg['total_quantity'] = stock_in_agg['Qty'] * stock_in_agg['unitSize']
     stock_in_agg['total_cost'] = stock_in_agg['Qty'] * stock_in_agg['Unit Price']
-    stock_in_agg = stock_in_agg[['productname_cleaned', 'total_quantity', 'total_cost', 'Qty']]
+    stock_in_agg = stock_in_agg[['productname_cleaned', 'Qty', 'total_cost']]
     stock_in_agg = stock_in_agg.rename(columns = {'Qty': 'quantity'})
     stock_in_agg = stock_in_agg.groupby('productname_cleaned').sum()
     stock_in_agg = stock_in_agg.reset_index()
+    
+    
+    # preparing stock-in report for export
+    ## require cost managers to input the unit size etc    
+    stock_in_agg = stock_in_agg.rename(columns = {
+            'Product Ordered': 'productname_cleaned',
+            'Qty': 'Qty',
+            'Est Total Cost': 'total_cost'
+            })       
+    
     
     
     # import existing inventory data
     if existing_inventory is not None:
         existing_inventory_df = pd.read_csv(existing_inventory, encoding = 'utf-8')
         existing_inventory_df = existing_inventory_df.fillna(0)
-        existing_inventory_df['starting_balance'] = existing_inventory_df['Actual Balance'] + existing_inventory_df['Transfers']
-        existing_inventory_df['Units Ordered'] = existing_inventory_df['starting_balance'] / (existing_inventory_df['Quantity Ordered']/existing_inventory_df['Units Ordered'])
-        # existing_inventory_df = existing_inventory_df[['Product Ordered', 'Actual Balance', 'Transfers', 'Total Cost', 'Units Ordered']]
-        del existing_inventory
+        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Total Cost', 'Unit Size', 'Unit of Measurement', 'Actual Balance', 'Transfers', 'Estimated Wastage']].copy()
+        stock_in_agg_final = stock_in_agg.merge(existing_inventory_df, on = 'Product Ordered', how = 'outer')
+        stock_in_agg_final = stock_in_agg_final.fillna(0)
+        stock_in_agg_final['Qty'] = stock_in_agg_final['Qty'] + (stock_in_agg_final['Actual Balance']/stock_in_agg_final['Unit Size']) 
+        stock_in_agg_final['Est Total Cost'] = stock_in_agg_final['Est Total Cost'] + stock_in_agg_final['Total Cost']
+        stock_in_agg_final = stock_in_agg_final[['Product Ordered', 'Qty', 'Est Total Cost', 'Unit Size', 'Unit of Measurement', 'Estimated Wastage']]
+        new_cols_list = ['Actual Balance','Transfers']
+        stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
         
-        ## append to stock_in_agg if applicable, then sum again
+    if existing_inventory is None:
+        new_cols_list = ['Unit Size', 'Unit of Measurement' 'Actual Balance', 'Transfers', 'Estimated Wastage']
+        stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
+         
+       
+    if st.button('Download Estimated Inventory Report as CSV'):
+        tmp_download_link2 = download_link(stock_in_agg_final, 'estimated_inventory.csv', 'Click here to download your Estimated Inventory Report!')
+        st.markdown(tmp_download_link2, unsafe_allow_html=True)    
+       
         
-        existing_inventory_df_narrow = existing_inventory_df[['Product Ordered', 'starting_balance', 'Total Cost', 'Units Ordered']]
-        existing_inventory_df_narrow = existing_inventory_df_narrow.rename(columns = {
-            'Product Ordered': 'productname_cleaned',
-            'starting_balance': 'total_quantity',
-            'Total Cost': 'total_cost',
-            'Units Ordered': 'quantity'
+    if corrected_stock_in_data is not None:
+        corrected_stock_in_data_df = pd.read_csv(corrected_stock_in_data, encoding = 'utf-8')
+        corrected_stock_in_data_df = corrected_stock_in_data_df.fillna(0)
+        del corrected_stock_in_data
+    
+        # get unit cost for profit-margin analysis
+        stock_in_agg_margin = corrected_stock_in_data_df.copy()
+        stock_in_agg_margin['unit_cost'] = stock_in_agg_margin['Est Total Cost'] / stock_in_agg_margin['Actual Balance']
+    
+        ### Crosswalk 2: Recipe Ingredients to Stock-In Report
+        
+        ## convert to list
+        unique_product_names = corrected_stock_in_data_df['Product Ordered'].drop_duplicates().tolist()
+        
+        # encode stock-in records
+        @st.cache
+        def stock_in_embeddings_fn():
+            stock_in_embeddings = sbert_model.encode(recipe_ingredients_list, convert_to_tensor = True)
+            return stock_in_embeddings
+               
+        stock_in_embeddings = stock_in_embeddings_fn()
+        
+        
+        # get a list of most similar item stocked from recipe and stock-in sheets
+        most_similar = []
+        for item in unique_product_names:
+            query_embedding = sbert_model.encode(item, convert_to_tensor = True)
+            cos_score = util.pytorch_cos_sim(stock_in_embeddings, query_embedding)[0]
+            best_match = torch.topk(cos_score, k = 1)
+            for score, idx in zip(best_match[0], best_match[1]):
+                most_similar.append(recipe_ingredients_list[idx])
+        
+        del query_embedding
+                
+        # stacking into a df
+        matched_ingredients_stock_in_df = pd.DataFrame({
+            'Product Ordered': unique_product_names,
+            'Ingredient': most_similar
             })
-        new_stock_in_agg = pd.concat([stock_in_agg, existing_inventory_df_narrow], ignore_index = True)
-        new_stock_in_agg = new_stock_in_agg.groupby('productname_cleaned').sum()
-        new_stock_in_agg = new_stock_in_agg.reset_index()
-        stock_in_agg = new_stock_in_agg.copy()
-        
     
-    # get unit cost for profit-margin analysis
-    stock_in_agg_margin = stock_in_agg.copy()
-    stock_in_agg_margin['unit_cost'] = stock_in_agg['total_cost'] / stock_in_agg['total_quantity']
-    
-    
-    ## convert to list
-    unique_product_names = stock_in_agg['productname_cleaned'].drop_duplicates().tolist()
-    
-    # encode stock-in records
-    stock_in_embeddings = sbert_model.encode(recipe_ingredients_list, convert_to_tensor = True)
-    
-    # get a list of most similar item stocked from recipe and stock-in sheets
-    most_similar = []
-    for item in unique_product_names:
-        query_embedding = sbert_model.encode(item, convert_to_tensor = True)
-        cos_score = util.pytorch_cos_sim(stock_in_embeddings, query_embedding)[0]
-        best_match = torch.topk(cos_score, k = 1)
-        for score, idx in zip(best_match[0], best_match[1]):
-            most_similar.append(recipe_ingredients_list[idx])
-            
-    # stacking into a df
-    matched_ingredients_stock_in_df = pd.DataFrame({
-        'productname_cleaned': unique_product_names,
-        'Ingredient_Upper': most_similar
-        })
     
     if matched_ingredients_stock_in_amended is not None and matched_recipe_pos_amended is not None:
         matched_ingredients_stock_in_amended_df = pd.read_csv(matched_ingredients_stock_in_amended, encoding = '1252')
@@ -228,7 +285,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         del matched_ingredients_stock_in_amended, matched_recipe_pos_amended
        
         # find out items ordered during the period 
-        pos_sheet_cleaned_ordered = pos_sheet_cleaned[['Article', 'Number of articles']]
+        pos_sheet_cleaned_ordered = pos_sheet_cleaned[['Article', 'Number of articles', 'Total due amount']]
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered.merge(matched_recipe_pos_amended_df, left_on = 'Article', right_on = 'POS Items')
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered[['Article', 'Number of articles', 'Most_Similar']]
        
@@ -239,62 +296,46 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
        
         # calculate quantity consumed by min serving size
         ## ceiling
-        recipe_ordered['Quantity_Consumed'] = np.ceil(recipe_ordered['Number of articles']/recipe_ordered['Servings'])*recipe_ordered['Quantity']
+        recipe_ordered['Quantity Consumed'] = np.ceil(recipe_ordered['Number of articles']/recipe_ordered['Servings'])*recipe_ordered['Quantity']
        
         # focus on just ingredients
         # group by ingredients to consolidate total quantity consumed
-        ingredient_consumption = recipe_ordered[['Ingredient_Upper', 'Quantity_Consumed', 'Unit of Measurement']]
-        ingredient_consumption = ingredient_consumption.groupby(['Ingredient_Upper']).sum()
+        ingredient_consumption = recipe_ordered[['Ingredient', 'Quantity Consumed', 'Unit of Measurement']]
+        ingredient_consumption = ingredient_consumption.groupby(['Ingredient']).sum()
         ingredient_consumption = ingredient_consumption.reset_index()
        
         # ingredient stock in crosswalk
-        ingredient_stockin_recipe_qc = matched_ingredients_stock_in_amended_df.merge(recipe_sheet_df[['Ingredient_Upper', 'Ingredient Ordered (if known)']].drop_duplicates(),
-                                                                                     on = 'Ingredient_Upper')
+        ingredient_stockin_recipe_qc = matched_ingredients_stock_in_amended_df.merge(recipe_sheet_df[['Ingredient', 'Ingredient Ordered (if known)']].drop_duplicates(),
+                                                                                     on = 'Ingredient')
        
         inventory_tracking = ingredient_consumption.merge(ingredient_stockin_recipe_qc)
-        inventory_tracking = inventory_tracking.groupby(['productname_cleaned']).sum()
+        inventory_tracking = inventory_tracking.groupby(['Product Ordered']).sum()
         inventory_tracking = inventory_tracking.reset_index()
-        inventory_tracking = inventory_tracking.merge(stock_in_agg)
+        inventory_tracking = inventory_tracking.merge(stock_in_agg_margin)
        
         ## get estimated balance
-        inventory_tracking['estimated_balance'] = inventory_tracking['total_quantity'] - inventory_tracking['Quantity_Consumed']
-        inventory_tracking['Cost of Quantity Consumed'] = inventory_tracking['Quantity_Consumed'] / inventory_tracking['total_quantity'] * inventory_tracking['total_cost']
+        inventory_tracking['Estimated Balance'] = (inventory_tracking['Qty'] * inventory_tracking['Unit Size']) - inventory_tracking['Quantity Consumed']
+        inventory_tracking['Cost of Quantity Consumed'] = (inventory_tracking['Quantity Consumed'] / (inventory_tracking['Qty'] * inventory_tracking['Unit Size'])) * inventory_tracking['Est Total Cost']
         inventory_tracking.replace(np.inf, 0, inplace=True)
-        inventory_tracking['Cost of Estimated Balance'] = inventory_tracking['total_cost'] - inventory_tracking['Cost of Quantity Consumed']
-        
-        inventory_tracking = inventory_tracking.rename(columns = {
-            'productname_cleaned': 'Product Ordered',
-            'quantity': 'Units Ordered',
-            'Quantity_Consumed': 'Quantity Consumed',
-            'total_quantity': 'Quantity Ordered',
-            'estimated_balance': 'Estimated Balance',
-            'total_cost': 'Total Cost'
-            })
-        
+        inventory_tracking['Cost of Estimated Balance'] = inventory_tracking['Est Total Cost'] - inventory_tracking['Cost of Quantity Consumed']
+            
         
         
         # get items that cannot be matched to recipes
-        unmatched = matched_ingredients_stock_in_amended_df.loc[matched_ingredients_stock_in_amended_df.Ingredient_Upper.isna(),]
-        unmatched = unmatched.merge(stock_in_agg)
-        unmatched = unmatched[['productname_cleaned','quantity', 'total_quantity', 'total_cost']]
-        
-        unmatched = unmatched.rename(columns = {
-            'productname_cleaned': 'Product Ordered',
-            'quantity': 'Units Ordered',
-            'total_quantity': 'Quantity Ordered',
-            'total_cost': 'Total Cost'
-            })
+        unmatched = matched_ingredients_stock_in_amended_df.loc[matched_ingredients_stock_in_amended_df.Ingredient.isna(),]
+        unmatched = unmatched.merge(stock_in_agg_margin)
+        unmatched = unmatched[['Product Ordered','Qty', 'Est Total Cost']]
+    
         
         # get pos items that cannot be matched properly
-        unmatched_pos = matched_recipe_pos_amended_df.loc[matched_recipe_pos_amended_df.Most_Similar.isna(),'POS Items']
+        unmatched_pos = matched_recipe_pos_amended_df.loc[matched_recipe_pos_amended_df.Most_Similar.isna(),['POS Items', 'Number of articles', 'Total due amount']]
         unmatched_pos = pd.DataFrame(unmatched_pos)
         unmatched_pos = unmatched_pos.rename(columns = {'POS Items': 'Articles'})
         
         # calculate margins
-        # matched_ingredients_stock_in_amended_df = pd.read_csv(matched_ingredients_stock_in_amended, encoding = '1252')
-        cost_calculation = recipe_ordered[['Food Item (As per POS system)', 'Ingredient_Upper', 'Quantity', 'Unit of Measurement']].copy()
-        cost_calculation = cost_calculation.merge(matched_ingredients_stock_in_amended_df, on = 'Ingredient_Upper')
-        cost_calculation = cost_calculation.merge(stock_in_agg_margin[['productname_cleaned', 'unit_cost']], on = 'productname_cleaned')
+        cost_calculation = recipe_ordered[['Food Item (As per POS system)', 'Ingredient', 'Quantity', 'Unit of Measurement']].copy()
+        cost_calculation = cost_calculation.merge(matched_ingredients_stock_in_amended_df, on = 'Ingredient')
+        cost_calculation = cost_calculation.merge(stock_in_agg_margin[['Product Ordered', 'unit_cost']], on = 'Product Ordered')
         cost_calculation.replace(np.inf, 0, inplace = True)
         
         # cost 
@@ -303,7 +344,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             )
     
         # averaging out the cost when there is more than one possible identical ingredient
-        summarized_cost_calculation = cost_calculation.groupby(['Food Item (As per POS system)', 'Ingredient_Upper', 'Quantity']).agg(
+        summarized_cost_calculation = cost_calculation.groupby(['Food Item (As per POS system)', 'Ingredient', 'Quantity']).agg(
             mean_constituent_cost=('constituent_cost', 'mean'))
         
         summarized_cost_calculation = summarized_cost_calculation.reset_index()
@@ -364,13 +405,13 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             total_constituent_revenue = lambda x: x.constituent_revenue *  x['Number of articles']
             )
         
-        ingredient_revenue = summarized_cost_calculation.groupby('Ingredient_Upper').sum()
+        ingredient_revenue = summarized_cost_calculation.groupby('Ingredient').sum()
         ingredient_revenue = ingredient_revenue.reset_index()
-        ingredient_revenue = ingredient_revenue[['Ingredient_Upper', 'total_constituent_revenue']]
+        ingredient_revenue = ingredient_revenue[['Ingredient', 'total_constituent_revenue']]
         ingredient_revenue = ingredient_revenue.merge(matched_ingredients_stock_in_amended_df)        
-        ingredient_revenue = ingredient_revenue[['productname_cleaned', 'total_constituent_revenue']].copy()
+        ingredient_revenue = ingredient_revenue[['Product Ordered', 'total_constituent_revenue']].copy()
         ingredient_revenue = ingredient_revenue.rename(columns = {
-            'productname_cleaned': 'Product Ordered',
+            'Product Ordered': 'Product Ordered',
             'total_constituent_revenue': 'Attributable Revenue'
             })
         
@@ -380,15 +421,11 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             ProfitMargin = lambda x: 100 * (1- (x['Cost of Quantity Consumed']/x['Attributable Revenue']))
             )
         
-        # preparing inventory tracking for final export
-        inventory_tracking = inventory_tracking[['Product Ordered', 'Total Cost', 'Cost of Quantity Consumed', 'Cost of Estimated Balance', 'Attributable Revenue', 'ProfitMargin', 'Units Ordered', 'Quantity Ordered', 'Quantity Consumed', 'Estimated Balance']]
-        new_cols_list = ['Actual Balance', 'Transfers']
-        inventory_tracking_final = inventory_tracking.reindex(columns = [*inventory_tracking.columns.tolist(), *new_cols_list])
         
         # delete encodings to solve resource limit problem
-        del sbert_model, recipe_item_embeddings, query_embedding, stock_in_embeddings
-    
+        # del sbert_model, recipe_item_embeddings, stock_in_embeddings
         
+        # download buttons
         if st.button('Download Inventory Reports as CSV'):
             tmp_download_link3 = download_link(inventory_tracking_final, 'estimated_inventory.csv', 'Click here to download your Inventory Report!')
             st.markdown(tmp_download_link3, unsafe_allow_html=True)
@@ -405,14 +442,17 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             tmp_download_link6 = download_link(cost_of_goods_sold_narrow, 'menu_items_margins.csv', 'Click here to download your Profit Margin (Menu Item) Report!')
             st.markdown(tmp_download_link6, unsafe_allow_html = True)
             
-    
+    # inventory trackers and crosswalks  
+   
     if st.button('Download Crosswalks as CSV'):
         # ingredients_stock_in xwalk
-        tmp_download_link = download_link(matched_ingredients_stock_in_df, 'ingredients_stockin.csv', 'Click here to download your file matching Ingredients to Stock-In Report!')
-        st.markdown(tmp_download_link, unsafe_allow_html=True)
+        tmp_download_link1a = download_link(matched_ingredients_stock_in_df, 'ingredients_stockin.csv', 'Click here to download your file matching Ingredients to Stock-In Report!')
+        st.markdown(tmp_download_link1a, unsafe_allow_html=True)
         # recipe_pos xwalk
-        tmp_download_link2 = download_link(matched_recipe_pos_df, 'recipe_pos.csv', 'Click here to download your file matching Recipe items to POS Report!')
-        st.markdown(tmp_download_link2, unsafe_allow_html=True)
+        tmp_download_link1b = download_link(matched_recipe_pos_df, 'recipe_pos.csv', 'Click here to download your file matching Recipe items to POS Report!')
+        st.markdown(tmp_download_link1b, unsafe_allow_html=True)
+        
+
     
     
    
