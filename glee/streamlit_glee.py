@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 24 October 2021
+Last updated on Sun, Nov 19, 2021
+
 
 Expo
 """
@@ -69,7 +71,7 @@ st.markdown('---')
 if pos_data is not None and recipe_data is not None and stock_in_data is not None and pos_sheet_name is not None and recipe_sheet_name is not None:
     
     # initialize sbert
-    @st.cache
+    @st.cache(allow_output_mutation = True)
     def load_transformer():
         sbert_model = SentenceTransformer('stsb-mpnet-base-v2')
         return sbert_model
@@ -148,7 +150,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # stacking into a df
     matched_recipe_pos_df = pd.DataFrame({
         'POS Items': pos_items,
-        'Most_Similar': most_similar
+        'Recipe Items': most_similar
         })
     
        
@@ -207,9 +209,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # preparing stock-in report for export
     ## require cost managers to input the unit size etc    
     stock_in_agg = stock_in_agg.rename(columns = {
-            'Product Ordered': 'productname_cleaned',
-            'Qty': 'Qty',
-            'Est Total Cost': 'total_cost'
+            'productname_cleaned': 'Product Ordered',
+            'quantity': 'Qty',
+            'total_cost': 'Est Total Cost'
             })       
     
     
@@ -228,9 +230,11 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
         
     if existing_inventory is None:
-        new_cols_list = ['Unit Size', 'Unit of Measurement' 'Actual Balance', 'Transfers', 'Estimated Wastage']
+        new_cols_list = ['Unit Size', 'Unit of Measurement', 'Actual Balance', 'Transfers', 'Estimated Wastage']
         stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
-         
+        
+    # remove rows with empty values
+    stock_in_agg_final = stock_in_agg_final.loc[stock_in_agg_final['Product Ordered'] != '']    
        
     if st.button('Download Estimated Inventory Report as CSV'):
         tmp_download_link2 = download_link(stock_in_agg_final, 'estimated_inventory.csv', 'Click here to download your Estimated Inventory Report!')
@@ -276,6 +280,14 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             'Product Ordered': unique_product_names,
             'Ingredient': most_similar
             })
+        
+        if st.button('Download Crosswalks as CSV'):
+            # ingredients_stock_in xwalk
+            tmp_download_link1a = download_link(matched_ingredients_stock_in_df, 'ingredients_stockin.csv', 'Click here to download your file matching Ingredients to Stock-In Report!')
+            st.markdown(tmp_download_link1a, unsafe_allow_html=True)
+            # recipe_pos xwalk
+            tmp_download_link1b = download_link(matched_recipe_pos_df, 'recipe_pos.csv', 'Click here to download your file matching Recipe items to POS Report!')
+            st.markdown(tmp_download_link1b, unsafe_allow_html=True)
     
     
     if matched_ingredients_stock_in_amended is not None and matched_recipe_pos_amended is not None:
@@ -287,12 +299,12 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         # find out items ordered during the period 
         pos_sheet_cleaned_ordered = pos_sheet_cleaned[['Article', 'Number of articles', 'Total due amount']]
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered.merge(matched_recipe_pos_amended_df, left_on = 'Article', right_on = 'POS Items')
-        pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered[['Article', 'Number of articles', 'Most_Similar']]
+        pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered[['Article', 'Number of articles', 'Recipe Items']]
        
         # merge with recipes df to get all components
         recipe_ordered = recipe_sheet_df.merge(pos_sheet_cleaned_ordered,
                                                left_on = 'Food Item (As per POS system)',
-                                               right_on = 'Most_Similar')
+                                               right_on = 'Recipe Items')
        
         # calculate quantity consumed by min serving size
         ## ceiling
@@ -328,9 +340,10 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
         
         # get pos items that cannot be matched properly
-        unmatched_pos = matched_recipe_pos_amended_df.loc[matched_recipe_pos_amended_df.Most_Similar.isna(),['POS Items', 'Number of articles', 'Total due amount']]
+        unmatched_pos = matched_recipe_pos_amended_df.loc[matched_recipe_pos_amended_df['Recipe Items'].isna(), 'POS Items']
         unmatched_pos = pd.DataFrame(unmatched_pos)
-        unmatched_pos = unmatched_pos.rename(columns = {'POS Items': 'Articles'})
+        unmatched_pos = unmatched_pos.rename(columns = {'POS Items': 'Article'})
+        unmatched_pos = unmatched_pos.merge(all_pos_cleaned[['Article', 'Number of articles', 'Total due amount']])
         
         # calculate margins
         cost_calculation = recipe_ordered[['Food Item (As per POS system)', 'Ingredient', 'Quantity', 'Unit of Measurement']].copy()
@@ -360,7 +373,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         ## crosswalk to connect to the POS system
         cost_of_goods_sold = cost_of_goods_sold.merge(matched_recipe_pos_amended_df, 
                                                       left_on = 'Food Item (As per POS system)', 
-                                                      right_on = 'Most_Similar')
+                                                      right_on = 'Recipe Items')
         
         cost_of_goods_sold = cost_of_goods_sold.merge(all_pos_cleaned[['Article', 'total_revenue']],
                                                       left_on = 'POS Items',
@@ -444,13 +457,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             
     # inventory trackers and crosswalks  
    
-    if st.button('Download Crosswalks as CSV'):
-        # ingredients_stock_in xwalk
-        tmp_download_link1a = download_link(matched_ingredients_stock_in_df, 'ingredients_stockin.csv', 'Click here to download your file matching Ingredients to Stock-In Report!')
-        st.markdown(tmp_download_link1a, unsafe_allow_html=True)
-        # recipe_pos xwalk
-        tmp_download_link1b = download_link(matched_recipe_pos_df, 'recipe_pos.csv', 'Click here to download your file matching Recipe items to POS Report!')
-        st.markdown(tmp_download_link1b, unsafe_allow_html=True)
+    
         
 
     
