@@ -217,13 +217,19 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     if existing_inventory is not None:
         existing_inventory_df = pd.read_csv(existing_inventory, encoding = 'utf-8')
         existing_inventory_df = existing_inventory_df.fillna(0)
-        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Total Cost', 'Unit Size', 'Unit of Measurement', 'Actual Balance', 'Transfers', 'Estimated Wastage']].copy()
+        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Qty', 'Est Total Cost', 'Unit Size', 'Unit of Measurement', 'Actual Balance']].copy()
+        existing_inventory_df['Est Total Cost'] = existing_inventory_df['Est Total Cost']/existing_inventory_df['Qty'] * existing_inventory_df['Actual Balance']/existing_inventory_df['Unit Size']
+        existing_inventory_df = existing_inventory_df.rename(columns = {
+            'Est Total Cost': 'Existing Cost',
+            'Actual Balance': 'Existing Actual Balance'
+            })
+        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Existing Cost', 'Existing Actual Balance', 'Unit Size', 'Unit of Measurement']].copy()
         stock_in_agg_final = stock_in_agg.merge(existing_inventory_df, on = 'Product Ordered', how = 'outer')
         stock_in_agg_final = stock_in_agg_final.fillna(0)
-        stock_in_agg_final['Qty'] = stock_in_agg_final['Qty'] + (stock_in_agg_final['Actual Balance']/stock_in_agg_final['Unit Size']) 
-        stock_in_agg_final['Est Total Cost'] = stock_in_agg_final['Est Total Cost'] + stock_in_agg_final['Total Cost']
-        stock_in_agg_final = stock_in_agg_final[['Product Ordered', 'Qty', 'Est Total Cost', 'Unit Size', 'Unit of Measurement', 'Estimated Wastage']]
-        new_cols_list = ['Actual Balance','Transfers']
+        stock_in_agg_final['Qty'] = stock_in_agg_final['Qty'] + (stock_in_agg_final['Existing Actual Balance']/stock_in_agg_final['Unit Size']) 
+        stock_in_agg_final['Est Total Cost'] = round(stock_in_agg_final['Est Total Cost'] + stock_in_agg_final['Existing Cost'], 2)
+        stock_in_agg_final = stock_in_agg_final[['Product Ordered', 'Qty', 'Est Total Cost', 'Unit Size', 'Unit of Measurement']]
+        new_cols_list = ['Actual Balance','Transfers', 'Estimated Wastage']
         stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
         
     if existing_inventory is None:
@@ -327,6 +333,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
        
         ## get estimated balance
         inventory_tracking['Estimated Balance'] = (inventory_tracking['Qty'] * inventory_tracking['Unit Size']) - inventory_tracking['Quantity Consumed']
+        inventory_tracking['Estimated Actual Balance Difference'] = inventory_tracking['Estimated Balance'] - inventory_tracking['Actual Balance']
         inventory_tracking['Cost of Quantity Consumed'] = (inventory_tracking['Quantity Consumed'] / (inventory_tracking['Qty'] * inventory_tracking['Unit Size'])) * inventory_tracking['Est Total Cost']
         inventory_tracking.replace(np.inf, 0, inplace=True)
         inventory_tracking['Cost of Estimated Balance'] = inventory_tracking['Est Total Cost'] - inventory_tracking['Cost of Quantity Consumed']
@@ -430,21 +437,19 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         # adding weighted ROI per ingredient to inventory tracking 
         inventory_tracking = inventory_tracking.merge(ingredient_revenue, on = 'Product Ordered')
         inventory_tracking = inventory_tracking.assign(
-            ProfitMargin = lambda x: 100 * (1- (x['Cost of Quantity Consumed']/x['Attributable Revenue']))
+            ProfitMargin = lambda x: round(100 * (1- (x['Cost of Quantity Consumed']/x['Attributable Revenue'])), 2),
+            CostMargin = lambda y: round(100 * (y['Cost of Quantity Consumed']/y['Attributable Revenue']), 2)
             )
         
-        # show aggregated margins
-        aggregated_margin = round(100*all_revenue/total_stock_in_cost, 2)
-        st.write("Aggregated Costs as % of Total Revenue")
-        st.write(aggregated_margin)
-        
+        inventory_tracking = inventory_tracking[['Product Ordered', 'Qty', 'Unit Size', 'Quantity Consumed', 'Estimated Balance', 'Actual Balance', 'Estimated Actual Balance Difference', 'Transfers', 'Estimated Wastage', 'Est Total Cost', 'Cost of Quantity Consumed', 'Cost of Estimated Balance', 'Attributable Revenue', 'ProfitMargin', 'CostMargin']]
+        total_cogs = round(inventory_tracking['Cost of Quantity Consumed'].sum(),2)
         
         # delete encodings to solve resource limit problem
         # del sbert_model, recipe_item_embeddings, stock_in_embeddings
         
         # download buttons
         if st.button('Download Inventory Reports as CSV'):
-            tmp_download_link3 = download_link(inventory_tracking_final, 'estimated_inventory.csv', 'Click here to download your Inventory Report!')
+            tmp_download_link3 = download_link(inventory_tracking, 'final_inventory.csv', 'Click here to download your Inventory Report!')
             st.markdown(tmp_download_link3, unsafe_allow_html=True)
             
             tmp_download_link4 = download_link(unmatched, 'estimated_unused_orders.csv', 'Click here to download your Unused Inventory Report!')
@@ -459,9 +464,15 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             tmp_download_link6 = download_link(cost_of_goods_sold_narrow, 'menu_items_margins.csv', 'Click here to download your Profit Margin (Menu Item) Report!')
             st.markdown(tmp_download_link6, unsafe_allow_html = True)
             
-    # inventory trackers and crosswalks  
-   
-    
+        # show aggregated margins
+        st.write("Total Revenue")
+        st.write(all_revenue)
+        st.write("Cost of Ingredients Sold")
+        st.write(total_cogs)
+        st.write('Costs as % of Revenue')
+        aggregated_margin = round(100*total_cogs/all_revenue, 2)
+        st.write(aggregated_margin)
+            
         
 
     
