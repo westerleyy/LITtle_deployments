@@ -381,7 +381,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         # obtaining margin
         cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.assign(
-            cost_pct = lambda y: round(100*(y.mean_constituent_cost/y.Revenue),2)
+            cost_pct = lambda y: round(100*(y.mean_constituent_cost/y.Revenue),2),
             margin = lambda x: round(100*(1-x.mean_constituent_cost/x.Revenue),2)
             )
         
