@@ -89,6 +89,13 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     all_pos_cleaned = pos_sheet_df.loc[(pos_sheet_df['Article']!= 'Total'),]
     all_pos_cleaned['Article'] = all_pos_cleaned.loc[:,'Article'].str.upper()
     
+    # total revenue
+    all_pos_cleaned = all_pos_cleaned.assign(
+            Revenue = lambda x: x['Net revenue'] + x['Fees'] + x['Service charges']
+            )
+    all_revenue = all_pos_cleaned['Revenue'].sum()
+
+    
     # import recipe data
     recipe_sheet_df = pd.read_excel(recipe_data, skiprows = 5, sheet_name = recipe_sheet_name)
     recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
@@ -109,14 +116,6 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     recipe_sheet_df['Ingredient'] = recipe_sheet_df.loc[:,'Ingredient Ordered (if known)'].str.upper()
     recipe_sheet_df['Ingredient'] = recipe_sheet_df.Ingredient.apply(lambda x: names_cleaning(str(x)))
     
-    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: re.sub(r'\([^)]*\)', '', str(x)))
-    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ",x))
-    
-    ## drop single letters
-    ## drop excessive whitespace
-    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: ' '.join( [w for w in x.split() if len(w)>2] ))
-    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: ' '.join(x.split()))
-    #recipe_sheet_df['Ingredient_Upper'] = recipe_sheet_df.Ingredient_Upper.apply(lambda x: x.upper())
     
     # get list of ingredients
     recipe_ingredients_list = recipe_sheet_df['Ingredient'].drop_duplicates().tolist()
@@ -184,11 +183,6 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: names_cleaning2(str(x)))    
     
-    #stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: re.sub(r'\([^)]*\)', '', x))
-    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x))
-    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join(x.split()))
-    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: ' '.join( [w for w in x.split() if len(w)>2] ))
-    #stock_in['productname_cleaned'] = stock_in.productname_cleaned.apply(lambda x: x.upper())
     
     # adjust unit price column
     def unit_price_adjustment(x):
@@ -252,6 +246,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         # get unit cost for profit-margin analysis
         stock_in_agg_margin = corrected_stock_in_data_df.copy()
         stock_in_agg_margin['unit_cost'] = stock_in_agg_margin['Est Total Cost'] / (stock_in_agg_margin['Unit Size'] * stock_in_agg_margin['Qty'])
+        
+        # total cost
+        total_stock_in_cost = stock_in_agg_margin['Est Total Cost'].sum()
     
         ### Crosswalk 2: Recipe Ingredients to Stock-In Report
         
@@ -333,7 +330,6 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         inventory_tracking['Cost of Quantity Consumed'] = (inventory_tracking['Quantity Consumed'] / (inventory_tracking['Qty'] * inventory_tracking['Unit Size'])) * inventory_tracking['Est Total Cost']
         inventory_tracking.replace(np.inf, 0, inplace=True)
         inventory_tracking['Cost of Estimated Balance'] = inventory_tracking['Est Total Cost'] - inventory_tracking['Cost of Quantity Consumed']
-            
         
         
         # get items that cannot be matched to recipes
@@ -346,7 +342,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         unmatched_pos = matched_recipe_pos_amended_df.loc[matched_recipe_pos_amended_df['Recipe Items'].isna(), 'POS Items']
         unmatched_pos = pd.DataFrame(unmatched_pos)
         unmatched_pos = unmatched_pos.rename(columns = {'POS Items': 'Article'})
-        unmatched_pos = unmatched_pos.merge(all_pos_cleaned[['Article', 'Number of articles', 'Total due amount']])
+        unmatched_pos = unmatched_pos.merge(all_pos_cleaned[['Article', 'Number of articles', 'Revenue']])
         
         # calculate margins
         cost_calculation = recipe_ordered[['Food Item (As per POS system)', 'Ingredient', 'Quantity', 'Unit of Measurement']].copy()
@@ -368,9 +364,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         # obtaining COGS
         cost_of_goods_sold = summarized_cost_calculation.groupby('Food Item (As per POS system)').sum()
-        all_pos_cleaned = all_pos_cleaned.assign(
-            total_revenue = lambda x: x['Net revenue'] + x['Fees']
-            )
+        
         
         
         ## crosswalk to connect to the POS system
@@ -378,16 +372,17 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
                                                       left_on = 'Food Item (As per POS system)', 
                                                       right_on = 'Recipe Items')
         
-        cost_of_goods_sold = cost_of_goods_sold.merge(all_pos_cleaned[['Article', 'total_revenue']],
+        cost_of_goods_sold = cost_of_goods_sold.merge(all_pos_cleaned[['Article', 'Revenue']],
                                                       left_on = 'POS Items',
                                                       right_on = 'Article')
         
         ## slimming the DF down
-        cost_of_goods_sold_narrow = cost_of_goods_sold[['Article', 'mean_constituent_cost', 'total_revenue']].copy()
+        cost_of_goods_sold_narrow = cost_of_goods_sold[['Article', 'mean_constituent_cost', 'Revenue']].copy()
         
         # obtaining margin
         cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.assign(
-            margin = lambda x: round(100*(1-x.mean_constituent_cost/x.total_revenue),2)
+            cost_pct = lambda y: round(100*(y.mean_constituent_cost/y.Revenue),2)
+            margin = lambda x: round(100*(1-x.mean_constituent_cost/x.Revenue),2)
             )
         
         cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.dropna()
@@ -395,13 +390,14 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.rename(columns = {
             'mean_constituent_cost': 'Cost Per Sale',
-            'total_revenue': 'Revenue Per Sale',
-            'margin': 'Profit Margin Pct'
+            'Revenue': 'Revenue Per Sale',
+            'margin': 'Profit Margin Pct',
+            'cost_pct': 'Cost of Production Pct'
             })
         
         # calculate weighted ROI on ingredient
         cost_of_goods_sold = cost_of_goods_sold.assign(
-            unit_revenue = lambda x: x.total_revenue/x.Quantity
+            unit_revenue = lambda x: x.Revenue/x.Quantity
             )
         
         summarized_cost_calculation = summarized_cost_calculation.merge(cost_of_goods_sold[['POS Items', 'unit_revenue']],
@@ -436,6 +432,11 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         inventory_tracking = inventory_tracking.assign(
             ProfitMargin = lambda x: 100 * (1- (x['Cost of Quantity Consumed']/x['Attributable Revenue']))
             )
+        
+        # show aggregated margins
+        aggregated_margin = round(100*all_revenue/total_stock_in_cost, 2)
+        st.write("Aggregated Costs as % of Total Revenue")
+        st.write(aggregated_margin)
         
         
         # delete encodings to solve resource limit problem
