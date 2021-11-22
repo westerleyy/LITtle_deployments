@@ -146,6 +146,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         best_match = torch.topk(cos_score, k = 1)
         for idx in best_match[1]:
             most_similar.append(unique_recipe_items[idx])
+    
+    del query_embedding
+    
             
     # stacking into a df
     matched_recipe_pos_df = pd.DataFrame({
@@ -248,7 +251,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
         # get unit cost for profit-margin analysis
         stock_in_agg_margin = corrected_stock_in_data_df.copy()
-        stock_in_agg_margin['unit_cost'] = stock_in_agg_margin['Est Total Cost'] / stock_in_agg_margin['Actual Balance']
+        stock_in_agg_margin['unit_cost'] = stock_in_agg_margin['Est Total Cost'] / (stock_in_agg_margin['Unit Size'] * stock_in_agg_margin['Qty'])
     
         ### Crosswalk 2: Recipe Ingredients to Stock-In Report
         
@@ -268,9 +271,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         most_similar = []
         for item in unique_product_names:
             query_embedding = sbert_model.encode(item, convert_to_tensor = True)
-            cos_score = util.pytorch_cos_sim(stock_in_embeddings, query_embedding)[0]
+            cos_score = util.pytorch_cos_sim(query_embedding, stock_in_embeddings)[0]
             best_match = torch.topk(cos_score, k = 1)
-            for score, idx in zip(best_match[0], best_match[1]):
+            for idx in best_match[1]:
                 most_similar.append(recipe_ingredients_list[idx])
         
         del query_embedding
@@ -350,7 +353,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         cost_calculation = cost_calculation.merge(matched_ingredients_stock_in_amended_df, on = 'Ingredient')
         cost_calculation = cost_calculation.merge(stock_in_agg_margin[['Product Ordered', 'unit_cost']], on = 'Product Ordered')
         cost_calculation.replace(np.inf, 0, inplace = True)
-        
+                
         # cost 
         cost_calculation = cost_calculation.assign(
             constituent_cost = lambda x: x['Quantity'] * x['unit_cost']
@@ -384,7 +387,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         # obtaining margin
         cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.assign(
-            margin = lambda x: 100*(1-x.mean_constituent_cost/x.total_revenue)
+            margin = lambda x: round(100*(1-x.mean_constituent_cost/x.total_revenue),2)
             )
         
         cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.dropna()
