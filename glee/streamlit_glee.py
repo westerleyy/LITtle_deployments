@@ -128,7 +128,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # encode recipe items
     
     @st.cache
-    def recipe_item_embeddings_fn():
+    def recipe_item_embeddings_fn(unique_recipe_items = unique_recipe_items):
         recipe_item_embeddings = sbert_model.encode(unique_recipe_items, convert_to_tensor = True)
         return recipe_item_embeddings
     
@@ -263,7 +263,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         # encode stock-in records
         @st.cache
-        def stock_in_embeddings_fn():
+        def stock_in_embeddings_fn(recipe_ingredients_list = recipe_ingredients_list):
             stock_in_embeddings = sbert_model.encode(recipe_ingredients_list, convert_to_tensor = True)
             return stock_in_embeddings
                
