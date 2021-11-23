@@ -35,8 +35,8 @@ with st.form(key = 'upload_form'):
     stock_in_data = st.file_uploader("📥 Stock-In Data", type = 'csv')
     category_exclusions = st.text_input('Categories to exclude from Stock-In (Comma-Separated):')
     category_exclusions = str(category_exclusions) 
-    corrected_stock_in_data = st.file_uploader("📥 Corrected Stock-In Data", type = 'csv')
     existing_inventory = st.file_uploader("📥 Starting Balance", type = 'csv')
+    corrected_stock_in_data = st.file_uploader("📥 Corrected Stock-In Data", type = 'csv')
     matched_ingredients_stock_in_amended = st.file_uploader("📥 Amended Ingredients to Stock-In Report", type = 'csv')
     matched_recipe_pos_amended = st.file_uploader("📥 Amended Recipe items to POS Report", type = 'csv')
     submit_button = st.form_submit_button(label='Submit')
@@ -452,7 +452,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         # download buttons
         if st.button('Download Inventory Reports as CSV'):
-            tmp_download_link3 = download_link(inventory_tracking, 'final_inventory.csv', 'Click here to download your Inventory Report!')
+            tmp_download_link3 = download_link(inventory_tracking, 'final_inventory.csv', 'Click here to download your Final Inventory Report!')
             st.markdown(tmp_download_link3, unsafe_allow_html=True)
             
             tmp_download_link4 = download_link(unmatched, 'estimated_unused_orders.csv', 'Click here to download your Unused Inventory Report!')
