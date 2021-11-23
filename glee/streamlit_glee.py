@@ -181,7 +181,15 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         x = x.upper()
         return x
     
-    stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: names_cleaning2(str(x)))    
+    stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: names_cleaning2(str(x))) 
+    
+    # creating a dictionary of product names
+    product_name_dictionary = stock_in[['productname_cleaned', 'Product Name']].copy()
+    product_name_dictionary = product_name_dictionary.drop_duplicates()
+    product_name_dictionary = product_name_dictionary.rename(columns = {
+        'productname_cleaned': 'Product Ordered Cleaned'
+        })
+    product_name_dictionary = product_name_dictionary.sort_values(by = ['Product Name'])
     
     
     # adjust unit price column
@@ -195,10 +203,8 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     # agg orders
     stock_in_agg = stock_in[['productname_cleaned', 'Qty', 'Unit Price']].copy()
-    # stock_in_agg['total_quantity'] = stock_in_agg['Qty'] * stock_in_agg['unitSize']
-    stock_in_agg['total_cost'] = stock_in_agg['Qty'] * stock_in_agg['Unit Price']
-    stock_in_agg = stock_in_agg[['productname_cleaned', 'Qty', 'total_cost']]
-    stock_in_agg = stock_in_agg.rename(columns = {'Qty': 'quantity'})
+    stock_in_agg['Est Total Cost'] = stock_in_agg['Qty'] * stock_in_agg['Unit Price']
+    stock_in_agg = stock_in_agg[['productname_cleaned', 'Qty', 'Est Total Cost']]
     stock_in_agg = stock_in_agg.groupby('productname_cleaned').sum()
     stock_in_agg = stock_in_agg.reset_index()
     
@@ -206,12 +212,8 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # preparing stock-in report for export
     ## require cost managers to input the unit size etc    
     stock_in_agg = stock_in_agg.rename(columns = {
-            'productname_cleaned': 'Product Ordered',
-            'quantity': 'Qty',
-            'total_cost': 'Est Total Cost'
+            'productname_cleaned': 'Product Ordered'
             })       
-    
-    
     
     # import existing inventory data
     if existing_inventory is not None:
@@ -230,7 +232,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         stock_in_agg_final['Est Total Cost'] = round(stock_in_agg_final['Est Total Cost'] + stock_in_agg_final['Existing Cost'], 2)
         stock_in_agg_final = stock_in_agg_final[['Product Ordered', 'Qty', 'Est Total Cost', 'Unit Size', 'Unit of Measurement']]
         new_cols_list = ['Actual Balance','Transfers', 'Estimated Wastage']
-        stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
+        stock_in_agg_final = stock_in_agg_final.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
         
     if existing_inventory is None:
         new_cols_list = ['Unit Size', 'Unit of Measurement', 'Actual Balance', 'Transfers', 'Estimated Wastage']
@@ -241,7 +243,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
        
     if st.button('Download Estimated Inventory Report as CSV'):
         tmp_download_link2 = download_link(stock_in_agg_final, 'estimated_inventory.csv', 'Click here to download your Estimated Inventory Report!')
-        st.markdown(tmp_download_link2, unsafe_allow_html=True)    
+        st.markdown(tmp_download_link2, unsafe_allow_html=True)
+        tmp_download_link2b = download_link(product_name_dictionary, 'product_name_dictionary.csv', 'Click here to download your Inventory Product Name Dictionary!')
+        st.markdown(tmp_download_link2b, unsafe_allow_html=True)
        
         
     if corrected_stock_in_data is not None:
@@ -329,7 +333,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         inventory_tracking = ingredient_consumption.merge(ingredient_stockin_recipe_qc)
         inventory_tracking = inventory_tracking.groupby(['Product Ordered']).sum()
         inventory_tracking = inventory_tracking.reset_index()
-        inventory_tracking = inventory_tracking.merge(stock_in_agg_margin)
+        inventory_tracking = inventory_tracking.merge(stock_in_agg_margin, how = 'right')
        
         ## get estimated balance
         inventory_tracking['Estimated Balance'] = (inventory_tracking['Qty'] * inventory_tracking['Unit Size']) - inventory_tracking['Quantity Consumed']
