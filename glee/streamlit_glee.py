@@ -225,7 +225,6 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             })
         existing_inventory_df = existing_inventory_df[['Product Ordered', 'Existing Cost', 'Existing Actual Balance', 'Unit Size', 'Unit of Measurement']].copy()
         stock_in_agg_final = stock_in_agg.merge(existing_inventory_df, on = 'Product Ordered', how = 'outer')
-        st.write(stock_in_agg_final.head(n=10))
         stock_in_agg_final = stock_in_agg_final.fillna(0)
         stock_in_agg_final['Qty_Adj'] = round(stock_in_agg_final['Existing Actual Balance']/stock_in_agg_final['Unit Size'], 2)
         stock_in_agg_final = stock_in_agg_final.fillna(0)
@@ -248,8 +247,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         st.markdown(tmp_download_link2, unsafe_allow_html=True)
         tmp_download_link2b = download_link(product_name_dictionary, 'product_name_dictionary.csv', 'Click here to download your Inventory Product Name Dictionary!')
         st.markdown(tmp_download_link2b, unsafe_allow_html=True)
-       
-        
+               
     if corrected_stock_in_data is not None:
         corrected_stock_in_data_df = pd.read_csv(corrected_stock_in_data, encoding = 'utf-8')
         corrected_stock_in_data_df = corrected_stock_in_data_df.fillna(0)
