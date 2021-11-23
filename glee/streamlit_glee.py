@@ -52,7 +52,6 @@ def download_link(object_to_download, download_filename, download_link_text):
 
     Examples:
     download_link(YOUR_DF, 'YOUR_DF.csv', 'Click here to download data!')
-    download_link(YOUR_STRING, 'YOUR_STRING.txt', 'Click here to download your text!')
     
     toth: [Chad_Mitchell](https://discuss.streamlit.io/t/heres-a-download-function-that-works-for-dataframes-and-txt/4052)
 
@@ -439,7 +438,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             })
         
         # adding weighted ROI per ingredient to inventory tracking 
-        inventory_tracking = inventory_tracking.merge(ingredient_revenue, on = 'Product Ordered')
+        inventory_tracking = inventory_tracking.merge(ingredient_revenue, on = 'Product Ordered', how = 'left')
         inventory_tracking = inventory_tracking.assign(
             ProfitMargin = lambda x: round(100 * (1- (x['Cost of Quantity Consumed']/x['Attributable Revenue'])), 2),
             CostMargin = lambda y: round(100 * (y['Cost of Quantity Consumed']/y['Attributable Revenue']), 2)
