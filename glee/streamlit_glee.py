@@ -100,7 +100,6 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
     del recipe_data
     
-    
     # adjust unit price column
     def names_cleaning(x):
         x = re.sub(r'\([^)]*\)', '', x)
@@ -226,12 +225,16 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             })
         existing_inventory_df = existing_inventory_df[['Product Ordered', 'Existing Cost', 'Existing Actual Balance', 'Unit Size', 'Unit of Measurement']].copy()
         stock_in_agg_final = stock_in_agg.merge(existing_inventory_df, on = 'Product Ordered', how = 'outer')
+        st.write(stock_in_agg_final.head(n=10))
         stock_in_agg_final = stock_in_agg_final.fillna(0)
-        stock_in_agg_final['Qty'] = stock_in_agg_final['Qty'] + (stock_in_agg_final['Existing Actual Balance']/stock_in_agg_final['Unit Size']) 
+        stock_in_agg_final['Qty_Adj'] = round(stock_in_agg_final['Existing Actual Balance']/stock_in_agg_final['Unit Size'], 2)
+        stock_in_agg_final = stock_in_agg_final.fillna(0)
+        stock_in_agg_final['Qty_Adj'] = stock_in_agg_final['Qty_Adj'].replace(np.nan, 0) 
+        stock_in_agg_final['Qty'] = stock_in_agg_final['Qty_Adj'] + stock_in_agg_final['Qty']
         stock_in_agg_final['Est Total Cost'] = round(stock_in_agg_final['Est Total Cost'] + stock_in_agg_final['Existing Cost'], 2)
         stock_in_agg_final = stock_in_agg_final[['Product Ordered', 'Qty', 'Est Total Cost', 'Unit Size', 'Unit of Measurement']]
         new_cols_list = ['Actual Balance','Transfers', 'Estimated Wastage']
-        stock_in_agg_final = stock_in_agg_final.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
+        stock_in_agg_final = stock_in_agg_final.reindex(columns = [*stock_in_agg_final.columns.tolist(), *new_cols_list])
         
     if existing_inventory is None:
         new_cols_list = ['Unit Size', 'Unit of Measurement', 'Actual Balance', 'Transfers', 'Estimated Wastage']
