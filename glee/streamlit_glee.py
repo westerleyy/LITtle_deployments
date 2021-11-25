@@ -188,7 +188,18 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         'productname_cleaned': 'Product Ordered Cleaned'
         })
     product_name_dictionary = product_name_dictionary.sort_values(by = ['Product Name'])
+    new_cols_list = ['Unit of Measurement']
+    product_name_dictionary = product_name_dictionary.reindex(columns = [*product_name_dictionary.columns.tolist(), *new_cols_list])
     
+    
+    # extracting uoms and unit sizes
+    common_uoms = ['ML', 'KG', '[0-9]+GR', ' GR ', 'GMS', 'LTR', 'KGS', 'GM', '[0-9]+CL', 'LT', '[0-9]+L', '[0-9]+G', '[0-9]+ML', ' [0-9]+C', '[0-9]+ GR/', 'GRAMS', ' GR ', ' G ', '[0-9]+ GR', '[0-9]+ CL', '[0-9]+KS', '[0-9]+ CS']
+    common_uoms_equivalent = ['ML', 'KG', 'GR', 'GR', 'GR', 'LTR', 'KG', 'GM', 'ML', 'LT', 'LTR', 'GR', 'ML', 'ML', 'GR', 'GR', 'GR', 'GR', 'GR', 'ML', 'KG', 'ML']
+    
+    for uom in range(len(common_uoms)):
+        product_name_dictionary.loc[product_name_dictionary['Product Name'].str.contains(common_uoms[uom]), 'Unit of Measurement'] = common_uoms_equivalent[uom]
+    
+    cleaned_product_name_uom = product_name_dictionary[['Product Ordered Cleaned', 'Unit of Measurement']].copy().drop_duplicates()
     
     # adjust unit price column
     def unit_price_adjustment(x):
@@ -205,7 +216,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     stock_in_agg = stock_in_agg[['productname_cleaned', 'Qty', 'Est Total Cost']]
     stock_in_agg = stock_in_agg.groupby('productname_cleaned').sum()
     stock_in_agg = stock_in_agg.reset_index()
-    
+    stock_in_agg = stock_in_agg.merge(cleaned_product_name_uom, left_on = 'productname_cleaned', right_on = 'Product Ordered Cleaned')
     
     # preparing stock-in report for export
     ## require cost managers to input the unit size etc    
@@ -221,9 +232,10 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         existing_inventory_df['Est Total Cost'] = existing_inventory_df['Est Total Cost']/existing_inventory_df['Qty'] * existing_inventory_df['Actual Balance']/existing_inventory_df['Unit Size']
         existing_inventory_df = existing_inventory_df.rename(columns = {
             'Est Total Cost': 'Existing Cost',
-            'Actual Balance': 'Existing Actual Balance'
+            'Actual Balance': 'Existing Actual Balance',
+            'Unit of Measurement': 'Existing Unit of Measurement'
             })
-        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Existing Cost', 'Existing Actual Balance', 'Unit Size', 'Unit of Measurement']].copy()
+        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Existing Cost', 'Existing Actual Balance', 'Unit Size', 'Existing Unit of Measurement']].copy()
         stock_in_agg_final = stock_in_agg.merge(existing_inventory_df, on = 'Product Ordered', how = 'outer')
         stock_in_agg_final = stock_in_agg_final.fillna(0)
         stock_in_agg_final['Qty_Adj'] = round(stock_in_agg_final['Existing Actual Balance']/stock_in_agg_final['Unit Size'], 2)
@@ -236,11 +248,14 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         stock_in_agg_final = stock_in_agg_final.reindex(columns = [*stock_in_agg_final.columns.tolist(), *new_cols_list])
         
     if existing_inventory is None:
-        new_cols_list = ['Unit Size', 'Unit of Measurement', 'Actual Balance', 'Transfers', 'Estimated Wastage']
+        new_cols_list = ['Unit Size', 'Actual Balance', 'Transfers', 'Estimated Wastage']
         stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
         
     # remove rows with empty values
-    stock_in_agg_final = stock_in_agg_final.loc[stock_in_agg_final['Product Ordered'] != '']    
+    stock_in_agg_final = stock_in_agg_final.loc[stock_in_agg_final['Product Ordered'] != '']
+
+
+    
        
     if st.button('Download Estimated Inventory Report as CSV'):
         tmp_download_link2 = download_link(stock_in_agg_final, 'estimated_inventory.csv', 'Click here to download your Estimated Inventory Report!')
