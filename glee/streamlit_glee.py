@@ -219,7 +219,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         if multiplier:
             interim = multiplier.group()
             interim = re.sub('[a-zA-Z ]+', "", interim)
-            m = int(interim)
+            m = float(interim)
         return m
 
     def unit_search(s):
