@@ -218,7 +218,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         multiplier = re.search('[0-9.]+[xX]| [0-9.]+ [xX] ', s)
         if multiplier:
             interim = multiplier.group()
-            interim = re.sub('[a-zA-Z ]+', "", interim)
+            interim = re.sub('[^0-9.]+', "", interim)
             m = float(interim)
         return m
 
@@ -256,8 +256,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
    
     
     # # merge in numerical tokens
-    # product_name_dictionary = product_name_dictionary.merge(eligible_num_tokens_df[['Product Name', 'Unit Size']], on = 'Product Name', how = 'left')
-    # product_name_dictionary = product_name_dictionary.fillna(1)
+
     product_name_dictionary['multiplier'] = product_name_dictionary['Product Name'].apply(lambda x: multiplier_search(x))
     product_name_dictionary['unit_size'] = product_name_dictionary['Product Name'].apply(lambda x: unit_search(x))
     product_name_dictionary = product_name_dictionary.assign(
@@ -700,7 +699,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         st.write("Cost of Ingredients Sold")
         st.write(total_cogs)
         st.write('Costs as % of Revenue')
-        aggregated_margin = round(100*total_stock_in_cost/all_revenue, 2)
+        aggregated_margin = round(100*total_cogs/all_revenue, 2)
         st.write(aggregated_margin)
     
     else:
