@@ -309,11 +309,11 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     if existing_inventory is not None:
         existing_inventory_df = pd.read_csv(existing_inventory, encoding = 'utf-8')
         existing_inventory_df = existing_inventory_df.fillna(0)
-        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Qty', 'Est Total Cost', 'Actual Balance']].copy()
-        existing_inventory_df['Est Total Cost'] = existing_inventory_df['Est Total Cost']/existing_inventory_df['Qty'] * existing_inventory_df['Actual Balance']/existing_inventory_df['Unit Size']
+        existing_inventory_df = existing_inventory_df[['Product Ordered', 'Qty', 'Est Total Cost', 'Estimated Balance', 'Unit Size']].copy()
+        existing_inventory_df['Est Total Cost'] = existing_inventory_df['Est Total Cost']/existing_inventory_df['Qty'] * existing_inventory_df['Estimated Balance']/existing_inventory_df['Unit Size']
         existing_inventory_df = existing_inventory_df.rename(columns = {
             'Est Total Cost': 'Existing Cost',
-            'Actual Balance': 'Existing Actual Balance'
+            'Estimated Balance': 'Existing Actual Balance'
             })
         existing_inventory_df = existing_inventory_df[['Product Ordered', 'Existing Cost', 'Existing Actual Balance']].copy()
         stock_in_agg_final = stock_in_agg.merge(existing_inventory_df, on = 'Product Ordered', how = 'outer')
