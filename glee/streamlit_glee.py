@@ -121,9 +121,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         alc_multiplier = ['CL']
         if x['Unit of Measurement'] in thousand_multiplier:
             m = float(x['Quantity']) * 1000
-        if x['Unit of Measurement'] in ounce_multiplier:
+        elif x['Unit of Measurement'] in ounce_multiplier:
             m = float(x['Quantity']) * 30
-        if x['Unit of Measurement'] in alc_multiplier:
+        elif x['Unit of Measurement'] in alc_multiplier:
             m = float(x['Quantity']) * 10
         else:
             m = x['Quantity']
@@ -254,13 +254,13 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
             if interim != '.':
                 if uom in alcohol:
                     interim = float(interim) * 10
-                if uom in thousand_multiplier:
+                elif uom in thousand_multiplier:
                     interim = float(interim) * 1000
-                if uom in gal_multiplier:
+                elif uom in gal_multiplier:
                     interim = float(interim) * 3780
-                if uom in ounce_multiplier:
+                elif uom in ounce_multiplier:
                     interim = float(interim) * 30
-                if uom in lb_multiplier:
+                elif uom in lb_multiplier:
                     interim = float(interim) * 454
                 m = float(interim)
                 if m == 0:
