@@ -117,8 +117,14 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # convert quantities to ml and gr
     def quantity_conversion(x):
         thousand_multiplier = ['kg', 'KG', 'k', 'KS', 'KGS', 'kgs', 'LTR', 'ltr', 'LT', 'lt']
+        ounce_multiplier = ['OZ']
+        alc_multiplier = ['CL']
         if x['Unit of Measurement'] in thousand_multiplier:
             m = float(x['Quantity']) * 1000
+        if x['Unit of Measurement'] in ounce_multiplier:
+            m = float(x['Quantity']) * 30
+        if x['Unit of Measurement'] in alc_multiplier:
+            m = float(x['Quantity']) * 10
         else:
             m = x['Quantity']
         return m
@@ -206,8 +212,8 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     # extracting uoms and unit sizes
     # need to convert everything from kg to g, and ltr to ml
-    common_uoms = ['ML', 'KG', '[0-9]+GR', ' GR ', 'GMS', 'LTR', 'KGS', 'GM', '[0-9]+CL', 'LT', '[0-9]+L', '[0-9]+G', '[0-9]+ML', ' [0-9.]+C', '[0-9.]+ GR/', 'GRAMS', ' GR ', ' G ', '[0-9.]+ GR', '[0-9.]+ CL', '[0-9.]+KS', '[0-9.]+ CS', '[0-9.]+ GMS', '[0-9]+ KGS']
-    common_uoms_equivalent = ['ML', 'GR', 'GR', 'GR', 'GR', 'ML', 'GR', 'GR', 'ML', 'ML', 'ML', 'GR', 'ML', 'ML', 'GR', 'GR', 'GR', 'GR', 'GR', 'ML', 'GR', 'ML', 'GR', 'GR']
+    common_uoms = ['ML', 'KG', '[0-9]+GR', ' GR ', 'GMS', 'LTR', 'KGS', 'GM', '[0-9]+CL', 'LT', '[0-9]+L', '[0-9]+G', '[0-9]+ML', ' [0-9.]+C', '[0-9.]+ GR/', 'GRAMS', ' GR ', ' G ', '[0-9.]+ GR', '[0-9.]+ CL', '[0-9.]+KS', '[0-9.]+ CS', '[0-9.]+ GMS', '[0-9]+ KGS', '[0-9]+GAL', ' [0-9]+ GAL', '[0-9]+OZ', ' [0-9]+ OZ', '[0-9]+LB', ' [0-9]+ LB']
+    common_uoms_equivalent = ['ML', 'GR', 'GR', 'GR', 'GR', 'ML', 'GR', 'GR', 'ML', 'ML', 'ML', 'GR', 'ML', 'ML', 'GR', 'GR', 'GR', 'GR', 'GR', 'ML', 'GR', 'ML', 'GR', 'GR', 'ML', 'ML', 'ML', 'ML', 'GR', 'GR']
     
     for uom in range(len(common_uoms)):
         product_name_dictionary.loc[product_name_dictionary['Product Name'].str.contains(common_uoms[uom]), 'Unit of Measurement'] = common_uoms_equivalent[uom]
@@ -231,10 +237,14 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
                        '[0-9.,]+KG', ' [0-9.,]+ KG', '\-[0-9,.]+KG', '[0-9.,]+KGS', ' [0-9.,]+ KGS', '\-[0-9.,]+KGS', '[0-9.,]+KS', ' [0-9.,]+ KS',
                        '[0-9]+GR', ' [0-9]+ GR ', '[0-9]+ GR//', ' [0-9]+ GR//', '[0-9]+GMS', ' [0-9.]+ GMS', '[0-9 ]+GM', ' [0-9 ]+ GM', '[0-9]+G', ' [0-9]+ G ', '[0-9\-]+GRAMS',  ' [0-9]+ GRAMS',                        
                        '[0-9.]+LTR', ' [0-9.]+ LTR', '[0-9.]+LT','[0-9.]+L', ' [0-9.]+ LT',' [0-9.]+ L',
-                       '[0-9]+GAL', ' [0-9]+ GAL'
+                       '[0-9]+GAL', ' [0-9]+ GAL',
+                       '[0-9.]+OZ', ' [0-9.]+ OZ',
+                       '[0-9]+LB', ' [0-9]+ LB'
                       ]
         thousand_multiplier = ['KG', 'KGS', 'KS', 'L', 'LT', 'LTR']
         gal_multiplier = ['GAL']
+        ounce_multiplier = ['OZ']
+        lb_multiplier = ['LB']
         alcohol = ['CL']
         unit = re.search('|'.join(common_uoms), s)
         if unit:
@@ -248,6 +258,10 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
                     interim = float(interim) * 1000
                 if uom in gal_multiplier:
                     interim = float(interim) * 3780
+                if uom in ounce_multiplier:
+                    interim = float(interim) * 30
+                if uom in lb_multiplier:
+                    interim = float(interim) * 454
                 m = float(interim)
                 if m == 0:
                     m = 1000
@@ -620,6 +634,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     inventory_tracking = inventory_tracking.fillna(0)
     inventory_tracking.replace(np.inf, 0, inplace = True)
     inventory_tracking.replace(-np.inf, 0, inplace = True)
+    inventory_tracking = inventory_tracking.drop_duplicates()
     
     # uom conversion
     common_uoms = ['KG', 'GMS', 'LTR', 'KGS', 'GM', 'CL', 'LT', 'L', 'C', 'GRAMS', 'G', 'KS', 'CS', 'GMS', 'KGS']
