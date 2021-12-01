@@ -97,34 +97,45 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # import recipe data
     recipe_sheet_df = pd.read_excel(recipe_data, skiprows = 5, sheet_name = recipe_sheet_name)
     recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
+    recipe_sheet_df = recipe_sheet_df.assign(
+        Servings = lambda x: x.Servings.astype(int)
+        )
     del recipe_data
     
-    # adjust unit price column
+    # adjust ingredient column (D)
     def names_cleaning(x):
-        x = re.sub(r'\([^)]*\)', '', x)
-        x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x)
-        x = ' '.join( [w for w in x.split() if len(w)>2] )
-        x = ' '.join(x.split())
         x = x.upper()
+        x = re.sub(r'\([^)]*\)', '', x)
+        x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", "", x)
+        x = ' '.join( [w for w in x.split() if len(w)>2] )
         return x
     
     # upper case all and clean the ingredient names
     recipe_sheet_df['Food Item (As per POS system)'] = recipe_sheet_df.loc[:,'Food Item (As per POS system)'].str.upper()
-    recipe_sheet_df['Ingredient'] = recipe_sheet_df.loc[:,'Ingredient Ordered (if known)'].str.upper()
-    recipe_sheet_df['Ingredient'] = recipe_sheet_df.Ingredient.apply(lambda x: names_cleaning(str(x)))
+    recipe_sheet_df['Unit of Measurement'] = recipe_sheet_df.loc[:,'Unit of Measurement'].str.upper()        
+    recipe_sheet_df['Ingredient'] = recipe_sheet_df['Ingredient Ordered (if known)'].apply(lambda x: names_cleaning(str(x)))
     
     
     # convert quantities to ml and gr
     def quantity_conversion(x):
-        thousand_multiplier = ['kg', 'KG', 'k', 'KS', 'KGS', 'kgs', 'LTR', 'ltr', 'LT', 'lt']
+        thousand_multiplier = ['KG', 'K', 'KS', 'KGS', 'LTR', 'LT']
         ounce_multiplier = ['OZ']
         alc_multiplier = ['CL']
+        cup_multiplier = ['CUP', 'CUPS']
+        spoon_multiplier = ['TBLS', 'TBSP']
+        soda_multiplier = ['CAN', 'BTL']
         if x['Unit of Measurement'] in thousand_multiplier:
             m = float(x['Quantity']) * 1000
         elif x['Unit of Measurement'] in ounce_multiplier:
             m = float(x['Quantity']) * 30
         elif x['Unit of Measurement'] in alc_multiplier:
             m = float(x['Quantity']) * 10
+        elif x['Unit of Measurement'] in cup_multiplier:
+            m = float(x['Quantity']) * 237
+        elif x['Unit of Measurement'] in spoon_multiplier:
+            m = float(x['Quantity']) * 15
+        elif x['Unit of Measurement'] in soda_multiplier:
+            m = float(x['Quantity']) * 330
         else:
             m = x['Quantity']
         return m
@@ -188,37 +199,29 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         stock_in = stock_in[exclusions]
         del category_exclusions
     
-    # remove trailing white spaces and excessive whitespaces
+    # remove trailing white spaces, excessive whitespaces and other stuff
     stock_in['Product Name'] = stock_in['Product Name'].apply(lambda x: x.rstrip())
-    
-    def names_cleaning2(x):
-        x = re.sub(r'\([^)]*\)', '', x)
-        x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", " ", x)
-        x = ' '.join(x.split())
-        x = ' '.join( [w for w in x.split() if len(w)>2] )
-        x = x.upper()
-        return x
-    
-    stock_in['productname_cleaned'] = stock_in['Product Name'].apply(lambda x: names_cleaning2(str(x))) 
-    
-    # creating a dictionary of product names
-    product_name_dictionary = stock_in[['productname_cleaned', 'Product Name', 'Unit']].copy()
-    product_name_dictionary = product_name_dictionary.drop_duplicates()
-    product_name_dictionary = product_name_dictionary.rename(columns = {
-        'Unit': 'Unit of Measurement'
-        })
-    product_name_dictionary = product_name_dictionary.sort_values(by = ['Product Name'])
+
     
     
     # extracting uoms and unit sizes
     # need to convert everything from kg to g, and ltr to ml
-    common_uoms = ['ML', 'KG', '[0-9]+GR', ' GR ', 'GMS', 'LTR', 'KGS', 'GM', '[0-9]+CL', 'LT', '[0-9]+L', '[0-9]+G', '[0-9]+ML', ' [0-9.]+C', '[0-9.]+ GR/', 'GRAMS', ' GR ', ' G ', '[0-9.]+ GR', '[0-9.]+ CL', '[0-9.]+KS', '[0-9.]+ CS', '[0-9.]+ GMS', '[0-9]+ KGS', '[0-9]+GAL', ' [0-9]+ GAL', '[0-9]+OZ', ' [0-9]+ OZ', '[0-9]+LB', ' [0-9]+ LB']
-    common_uoms_equivalent = ['ML', 'GR', 'GR', 'GR', 'GR', 'ML', 'GR', 'GR', 'ML', 'ML', 'ML', 'GR', 'ML', 'ML', 'GR', 'GR', 'GR', 'GR', 'GR', 'ML', 'GR', 'ML', 'GR', 'GR', 'ML', 'ML', 'ML', 'ML', 'GR', 'GR']
+    common_uoms = ['GM', 'KG', '[0-9]+GR', ' GR ', 'GMS', 'KGS', '[0-9]+G', '[0-9.]+ GR//', 
+                   'GRAMS', ' GR ', ' G ', '[0-9.]+ GR', '[0-9.]+KS',  '[0-9.]+ GMS', '[0-9]+ KGS', 
+                   '[0-9]+LB', ' [0-9]+ LB', '[A-Z0-9/-]+KGS',
+                   'LTR', 'ML','[0-9]+CL', 'LT', '[0-9]+L',  '[0-9]+ML', ' [0-9.]+C', '[0-9.]+ CL', 
+                   '[0-9.]+ CS', '[0-9]+GAL', ' [0-9]+ GAL', '[0-9]+OZ', ' [0-9]+ OZ' ]
+    
+    common_uoms_equivalent = ['GR', 'GR', 'GR', 'GR', 'GR', 'GR', 'GR', 'GR', 'GR', 'GR', 'GR', 'GR', 
+                              'GR', 'GR', 'GR', 'GR', 'GR', 'GR',
+                              'ML', 'ML', 'ML', 'ML', 'ML', 'ML', 'ML', 'ML', 'ML', 'ML', 'ML', 'ML', 
+                              'ML']
     
     for uom in range(len(common_uoms)):
-        product_name_dictionary.loc[product_name_dictionary['Product Name'].str.contains(common_uoms[uom]), 'Unit of Measurement'] = common_uoms_equivalent[uom]
+        stock_in.loc[stock_in['Product Name'].str.contains(common_uoms[uom]), 'Unit of Measurement'] = common_uoms_equivalent[uom]
     
-    
+    stock_in['Unit'] = stock_in['Unit'].apply(lambda x: re.sub("KGS|KG", "GR", x))
+        
     def multiplier_search(s):
         m = 1
         multiplier = re.search('[0-9.]+[xX]| [0-9.]+ [xX] ', s)
@@ -267,42 +270,57 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
                     m = 1000
         return m
     
-   
+    def soda_multiplier(t):
+        sec_multiplier = 1
+        soda_identifier = ' CS'
+        soda_search = re.search(soda_identifier, t)
+        if soda_search:
+            sec_multiplier = 24
+        return sec_multiplier  
     
-    # # merge in numerical tokens
-
-    product_name_dictionary['multiplier'] = product_name_dictionary['Product Name'].apply(lambda x: multiplier_search(x))
-    product_name_dictionary['unit_size'] = product_name_dictionary['Product Name'].apply(lambda x: unit_search(x))
-    product_name_dictionary = product_name_dictionary.assign(
-       unit_size = lambda x: x.unit_size * x.multiplier
-    )
-    product_name_dictionary = product_name_dictionary.rename(columns = {'unit_size':'Unit Size'})
-    product_name_dictionary = product_name_dictionary[['productname_cleaned', 'Product Name', 'Unit of Measurement', 'Unit Size']]
-    cleaned_product_name_uom = product_name_dictionary[['productname_cleaned', 'Unit of Measurement', 'Unit Size']].copy().drop_duplicates()
-        
-
+    def drinks_unit_price_multiplier(d):
+        multiplier = d['Unit Price']
+        if d['Upload Time'] < '2021-11-22' and d['Category'] == 'Alcoholic Beverage':
+            multiplier = 1.3 * d['Unit Price']
+        elif d['Upload Time'] < '2021-11-22' and d['Category'] == 'Non Alcoholic Beverage':
+            multiplier_exclusion = re.search('JUICE|SYRUP', d['Product Name'])
+            if multiplier_exclusion:
+                multiplier = 1 * d['Unit Price']
+            else:
+                multiplier = 1.5 * d['Unit Price']
+        return multiplier  
     
-    # adjust unit price column
     def unit_price_adjustment(x):
         x = re.sub(r'AED ', '', x)
         x = re.sub(r',', '', x)
         x = float(x)
         return x
     
-    stock_in['Unit Price'] = stock_in['Unit Price'].apply(lambda x: unit_price_adjustment(str(x)))
+    # adjust unit price column
+    stock_in['Unit Price'] = stock_in['Unit Price'].apply(lambda x: unit_price_adjustment(str(x)))    
+    
+    # look for multipliers, unit size, and apply
+    stock_in['Unit Price'] = stock_in.apply(drinks_unit_price_multiplier, axis = 1)
+    stock_in['multiplier'] = stock_in['Product Name'].apply(lambda x: multiplier_search(x))
+    stock_in['unit_size'] = stock_in['Product Name'].apply(lambda x: unit_search(x))
+    stock_in['soda_multiplier'] = stock_in['Product Name'].apply(lambda x: soda_multiplier(x))
+    stock_in = stock_in.assign(
+       unit_size = lambda x: x.unit_size * x.multiplier * x.soda_multiplier
+    )
+    stock_in = stock_in.rename(columns = {'unit_size':'Unit Size'})
+    stock_in.drop(['multiplier', 'soda_multiplier'], axis = 1, inplace = True)    
     
     # agg orders
-    stock_in_agg = stock_in[['productname_cleaned', 'Qty', 'Unit Price']].copy()
+    stock_in_agg = stock_in[['Product Name', 'Qty', 'Unit', 'Unit Size',  'Unit Price']].copy()
     stock_in_agg['Est Total Cost'] = stock_in_agg['Qty'] * stock_in_agg['Unit Price']
-    stock_in_agg = stock_in_agg[['productname_cleaned', 'Qty', 'Est Total Cost']]
-    stock_in_agg = stock_in_agg.groupby('productname_cleaned').sum()
+    stock_in_agg.drop('Unit Price', axis = 1, inplace = True)
+    stock_in_agg = stock_in_agg.groupby(['Product Name', 'Unit', 'Unit Size']).sum()
     stock_in_agg = stock_in_agg.reset_index()
-    stock_in_agg = stock_in_agg.merge(cleaned_product_name_uom, on = 'productname_cleaned')
     
     # preparing stock-in report for export
     ## require cost managers to input the unit size etc    
     stock_in_agg = stock_in_agg.rename(columns = {
-            'productname_cleaned': 'Product Ordered'
+            'Product Name': 'Product Ordered'
             })       
     
     # import existing inventory data
@@ -348,19 +366,23 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         stock_in_agg_final = stock_in_agg_final.rename(columns = {'Corrected Unit Size': 'Unit Size'})
         stock_in_agg_margin = stock_in_agg_final.copy()
         
-        ## convert to product names list
-        unique_product_names = corrected_stock_in_data_df['Product Ordered'].drop_duplicates().tolist()
+
     
     # in the event that corrected stock in data is not uploaded, the tool should be allowed to continue 
     if corrected_stock_in_data is None:
         stock_in_agg_margin = stock_in_agg_final.copy()
-        
-        ## convert to product names list
-        unique_product_names = stock_in_agg['Product Ordered'].drop_duplicates().tolist()
+
             
     
     # continuation of above REGARDLESS of presence of corrected stock in data
     stock_in_agg_margin['unit_cost'] = stock_in_agg_margin['Est Total Cost'] / (stock_in_agg_margin['Unit Size'] * stock_in_agg_margin['Qty'])
+    
+    stock_in_agg_margin['productname_cleaned'] = stock_in_agg_margin['Product Ordered'].apply(lambda x: names_cleaning(str(x))) 
+    
+    # creating a dictionary of product names
+    product_name_dictionary = stock_in_agg_margin[['productname_cleaned', 'Product Ordered']].copy()
+    product_name_dictionary = product_name_dictionary.drop_duplicates()
+    unique_product_names = product_name_dictionary['productname_cleaned'].drop_duplicates().tolist()
         
     # total cost
     total_stock_in_cost = stock_in_agg_margin['Est Total Cost'].sum()
@@ -390,9 +412,13 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
                 
     # stacking into a df
     matched_ingredients_stock_in_df = pd.DataFrame({
-        'Product Ordered': unique_product_names,
+        'productname_cleaned': unique_product_names,
         'Ingredient': most_similar
         })
+    
+    matched_ingredients_stock_in_df = matched_ingredients_stock_in_df.merge(product_name_dictionary)
+    matched_ingredients_stock_in_df.drop('productname_cleaned', axis = 1, inplace = True)
+    matched_ingredients_stock_in_df = matched_ingredients_stock_in_df[['Product Ordered', 'Ingredient']]
         
     # allow the tool to go on without amended crosswalks    
     if matched_ingredients_stock_in_amended is None and matched_recipe_pos_amended is None:
