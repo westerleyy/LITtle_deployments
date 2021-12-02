@@ -18,9 +18,19 @@ path = r'C:\Users\wesch\OneDrive\Documents\FoodRazor\expo'
 ## POS
 pos_sheet_df = pd.read_excel(path + "\data\POS\Jubilee_Adrift Sales.xlsx", skiprows = 6, sheet_name = "Scarpetta")
 pos_sheet_df = pos_sheet_df.dropna(how = 'all')
+
 ## RECIPE
 recipe_sheet_df = pd.read_excel(path + "\data\Recipe\Scarpetta_Recipe.xlsx", skiprows = 5, sheet_name = 'Food & Bev menu_Wes')
 recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
+batch = False
+### try to look for and import batched recipes
+try:
+    recipe_sheet_batch_df = pd.read_excel(path, sheet_name = 'Batch')
+    recipe_sheet_batch_df = recipe_sheet_batch_df.dropna()
+    batch = True
+except: 
+    print ('No batched recipes detected.')
+
 ## STOCK-IN
 stock_in = pd.read_csv(path + "\data\Stock_In\FoodRazor_App_StockIn_Scarpetta.csv", encoding = 'utf-8')
 stock_in = stock_in.dropna()
@@ -94,6 +104,27 @@ recipe_sheet_df.rename(columns = {'NewQuantity': 'Quantity'}, inplace = True)
 # get list of ingredients
 recipe_ingredients_list = recipe_sheet_df['Ingredient'].drop_duplicates().tolist()
 
+# handling of batched ingredients
+if batch is True:
+    # ensure servings column is an int, upper case all and clean the ingredient names
+    recipe_sheet_batch_df = recipe_sheet_batch_df.assign(
+        Servings = lambda x: x.Servings.astype(int)
+        )
+    recipe_sheet_batch_df['Food Item (As per POS system)'] = recipe_sheet_batch_df.loc[:,'Food Item (As per POS system)'].str.upper()
+    recipe_sheet_batch_df['Unit of Measurement'] = recipe_sheet_batch_df.loc[:,'Unit of Measurement'].str.upper()    
+    recipe_sheet_batch_df['Ingredient'] = recipe_sheet_batch_df['Ingredient Ordered (if known)'].apply(lambda x: names_cleaning(str(x)))
+     
+    # convert all units to ml and gr
+    recipe_sheet_batch_df['NewQuantity'] = recipe_sheet_batch_df.apply(quantity_conversion, axis = 1)
+    recipe_sheet_batch_df.drop('Quantity', axis = 1, inplace = True)
+    recipe_sheet_batch_df.rename(columns = {'NewQuantity': 'Quantity'}, inplace = True)
+    
+    # get list of ingredients
+    recipe_batch_ingredients_list = recipe_sheet_batch_df['Ingredients'].drop_duplicates().tolist()
+    
+    # append to recipe ingredients list
+    recipe_ingredients_list.extend(recipe_batch_ingredients_list)
+
 ## Crosswalk 1
 # detect similar menu items across recipe and pos sheets
 
@@ -130,21 +161,28 @@ matched_recipe_pos_df = pd.DataFrame({
 
 ## STOCK-IN DATA
 # remove those categories to be excluded
-category_exclusions = ["Printing & Stationary", "Tax Adjustment", "CAPEX", "Other",
-                       "Cleaning", "Cleaning Supplies", "Kitchen Supplies", 
-                       "General Supplies", "Packaging", "Bar Expenses",
-                       "Pre-Opening - Payroll / HR Related", 
-                       "Pre-Opening - Accommodation & Air Tickets",
-                       "Pre-Opening - Linen & Uniform", 
-                       "Pre-Opening - Legal / Licenses",
-                       "Pre-Opening-PR & Marketing",
-                       "Pre-Opening - IT & Technology",
-                       "Pre-Opening - China/Glass/Silver",
-                       "Pre-Opening - Staff Meal",
-                       "Pre-Opening Expenses",
-                       "Pre-Opening Operating Supplies",
-                       "Pre-Opening Training"                             
-                       ]
+category_exclusions = ["Printing & Stationary", "Printing and Stationery Supplies",  "Tax Adjustment", "CAPEX", "Other",
+                        "Cleaning", "Cleaning Supplies", "Kitchen Supplies", "Discount", "Guest Supplies", "Rounding",
+                        "General Supplies", "Packaging", "Bar Expenses", "Operating Supplies General",
+                        "Cleaning & Chemical", "Utilities", "Music & entertainment", "Payroll & Related Expenses",
+                        "PR & Marketing", "Payroll Provision (Guest Chefs)", "Transport", "Accommodation & Air Tickets",
+                        "OS&E - Kitchen", "OS&E - FOH", "Supplies Kitchen", "Supplies Others", "Supplies Cleaning",
+                        "Pre-Opening Printing and Stationery Supplies",
+                        "Pre-Opening - Kitchenware",
+                        "Pre-Opening - Payroll / HR Related", 
+                        "Pre-Opening - Accommodation & Air Tickets",
+                        "Pre-Opening - Linen & Uniform", 
+                        "Pre-Opening - Legal / Licenses",
+                        "Pre-Opening-PR & Marketing",
+                        "Pre-Opening - IT & Technology",
+                        "Pre-Opening - China/Glass/Silver",
+                        "Pre-Opening - Staff Meal",
+                        "Pre-Opening Expenses",
+                        "Pre-Opening Operating Supplies",
+                        "Pre-Opening Training",
+                        "Pre-Opening-PR & Marketing",
+                        "Pre-Opening Music and Entertain. Expenses"
+                           ]
 exclusions = ~stock_in.Category.isin(category_exclusions)
 stock_in = stock_in[exclusions]
 
