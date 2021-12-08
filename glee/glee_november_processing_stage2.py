@@ -13,12 +13,12 @@ import os
 path = r'C:\Users\wesch\OneDrive\Documents\FoodRazor\expo\output\nov21_reporting'
 os.chdir(path)
 
-done_weird = ['\Kojaki']
-outlet = [r'\Adrift', r'\Mina Seyahi', r'\National', r'\Scarpetta',r'\Kutir', r'\Baron' ]
+done = ['\Kojaki', r'\Mina Seyahi', r'\National', r'\Scarpetta',r'\Kutir', r'\Baron']
+outlets = ['\Adrift', r'\Mina Seyahi', r'\National', r'\Scarpetta',r'\Kutir', r'\Baron']
 
 batch_outlet = [r'\Baron']
 
-for outlet in outlet:
+for outlet in outlets:
     stock_in_agg = pd.read_csv(path + outlet + '\stock_in_agg.csv')
     stock_in_unit_qc = pd.read_csv(path + outlet + '\stock_in_unit_qc_amended.csv')
     stock_in_ingredients_xwalk = pd.read_csv(path + outlet + '\stock_in_ingredients_xwalk_amended.csv')
@@ -65,8 +65,8 @@ for outlet in outlet:
     def names_cleaning(x):
         x = x.upper()
         x = re.sub(r'\([^)]*\)', '', x)
-        sevenup_exception = "UP "
-        if sevenup_exception in x:
+        sevenup_exception = re.search('7 UP|7UP', x)
+        if sevenup_exception:
             x = x
         else:
             x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", "", x)
@@ -92,7 +92,7 @@ for outlet in outlet:
         elif x['Unit of Measurement'] in spoon_multiplier:
             m = float(x['Quantity']) * 15
         elif x['Unit of Measurement'] in soda_multiplier:
-            m = float(x['Quantity']) * 330
+            m = float(x['Quantity']) * 300
         else:
             m = x['Quantity']
         return m
@@ -310,9 +310,9 @@ for outlet in outlet:
         unit_revenue = lambda x: x.Revenue/x.Quantity
         )
     
-    summarized_cost_calculation = summarized_cost_calculation.merge(cost_of_goods_sold[['POS Items', 'unit_revenue']],
+    summarized_cost_calculation = summarized_cost_calculation.merge(cost_of_goods_sold[['Recipe Items', 'unit_revenue']],
                                                                     left_on = 'Food Item (As per POS system)',
-                                                                    right_on = 'POS Items'
+                                                                    right_on = 'Recipe Items'
                                                                     )
     
     summarized_cost_calculation = summarized_cost_calculation.assign(

@@ -74,8 +74,8 @@ def quantity_replacement(x):
 def names_cleaning(x):
     x = x.upper()
     x = re.sub(r'\([^)]*\)', '', x)
-    sevenup_exception = "UP "
-    if sevenup_exception in x:
+    sevenup_exception = re.search('7 UP|7UP', x)
+    if sevenup_exception:
         x = x
     else:
         x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", "", x)
