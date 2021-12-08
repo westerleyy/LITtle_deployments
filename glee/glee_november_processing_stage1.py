@@ -15,10 +15,11 @@ import os
 path = r'C:\Users\wesch\OneDrive\Documents\FoodRazor\expo\output\nov21_reporting'
 os.chdir(path)
 
-completed = ["\Adrift", r"\National", r"\African Food Hall", r"\Baron", "\Cafe Milano", r"\Canvas Coffee Culture", r"\Kojaki",]
+completed = ["\Adrift", r"\National", r"\African Food Hall", r"\Baron", "\Cafe Milano", r"\Canvas Coffee Culture", r"\Kojaki",
+             r"\Long Chim", r"\Matthew Kenny", r"\Mina Seyahi", r"\National", r"\Scarpetta", r"\Sports Bar", r"\National"]
 servings_tbd = ["\Bread Ahead"]
 
-outlet = ["\Kutir", r"\Long Chim", r"\Matthew Kenny", r"\Mina Seyahi", r"\National", r"\Scarpetta", r"\Sports Bar"]
+outlet = [r"\Baron"]
 
 # initialize sbert
 def load_transformer():
@@ -38,10 +39,11 @@ for outlet in outlet:
     recipe_sheet_df = pd.read_excel(path + outlet + "\Recipe.xlsx", sheet_name = 'Reformatted')
     recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
     batch = False
+    
     ### try to look for and import batched recipes
     try:
-        recipe_sheet_batch_df = pd.read_excel(path, sheet_name = 'Batch')
-        recipe_sheet_batch_df = recipe_sheet_batch_df.dropna()
+        recipe_sheet_batch_df = pd.read_excel(path + outlet + "\Recipe.xlsx", sheet_name = 'Batch')
+        recipe_sheet_batch_df = recipe_sheet_batch_df.dropna(how = 'all')
         batch = True
     except: 
         print ('No batched recipes detected.')
@@ -52,8 +54,6 @@ for outlet in outlet:
     
     ## POS DATA 
     # remove all nonsensical values
-    pos_sheet_cleaned = pos_sheet_df.loc[(pos_sheet_df['Article']!= 'Total')&(pos_sheet_df['Number of articles']>0),]
-    pos_sheet_cleaned['Article'] = pos_sheet_cleaned.loc[:,'Article'].str.upper()
     all_pos_cleaned = pos_sheet_df.loc[(pos_sheet_df['Article']!= 'Total'),]
     all_pos_cleaned.dropna(inplace = True)
     all_pos_cleaned['Article'] = all_pos_cleaned.loc[:,'Article'].str.upper()
@@ -129,7 +129,7 @@ for outlet in outlet:
         recipe_sheet_batch_df.rename(columns = {'NewQuantity': 'Quantity'}, inplace = True)
         
         # get list of ingredients
-        recipe_batch_ingredients_list = recipe_sheet_batch_df['Ingredients'].drop_duplicates().tolist()
+        recipe_batch_ingredients_list = recipe_sheet_batch_df['Ingredient'].drop_duplicates().tolist()
         
         # append to recipe ingredients list
         recipe_ingredients_list.extend(recipe_batch_ingredients_list)
@@ -203,13 +203,13 @@ for outlet in outlet:
                            "FC-PR & Marketing", "OE - Admin - Transport", "FC-IT & Technology", 'OE-Bar Expenses',
                            "OE-Admin - Meal Allocation", "Task force"
                                ]
+    stock_in['Category'] = stock_in['Category'].apply(lambda x: x.rstrip())
     exclusions = ~stock_in.Category.isin(category_exclusions)
     stock_in = stock_in[exclusions]
     
     # remove trailing white spaces
     # clean the product names for easier matching later
     stock_in['Product Name'] = stock_in['Product Name'].apply(lambda x: x.rstrip())
-    
     
     # extracting uoms and unit sizes
     # need to convert everything from kg to g, and ltr to ml
@@ -331,6 +331,8 @@ for outlet in outlet:
         UnitPrice = lambda x: round(x['Est Total Cost']/x['Qty'], 2),
         UnitCost = lambda y: round(y['Est Total Cost']/(y['Qty'] * y['Unit Size']), 2)
         )
+    
+### CHECKING STOPPED HERE
     
     stock_in_agg['Cleaned Product Name'] = stock_in_agg['Product Name'].apply(lambda x: names_cleaning(str(x)))
     

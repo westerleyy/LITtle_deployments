@@ -12,7 +12,7 @@ import os
 
 path = r'C:\Users\wesch\OneDrive\Documents\FoodRazor\expo\output\nov21_reporting'
 os.chdir(path)
-outlet = ["\Baron", r"\Jubilee", r"\Kutir", r"\Sports Bar", r"\Mina Seyahi"]
+outlet = ["\Baron"]
 
 for outlet in outlet:
    
