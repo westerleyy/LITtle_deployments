@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 24 October 2021
-Last updated on Sat, Nov 26, 2021
+Last updated on Tue, Dec 14, 2021
 
 
 Expo
@@ -25,19 +25,18 @@ st.markdown("## 📑 Data Upload")
 
 
 with st.form(key = 'upload_form'):
-    pos_data = st.file_uploader("📥 POS Data", type = 'xlsx')
-    pos_sheet_name = st.text_input('POS Data Sheet Name:')
+    pos_data = st.file_uploader("📥 POS ", type = 'xlsx')
+    pos_sheet_name = st.text_input('POS Sheet Name:')
     pos_sheet_name = str(pos_sheet_name)
     recipe_data = st.file_uploader("📥 Recipe Data", type = 'xlsx')
     recipe_sheet_name = st.text_input('Recipe Data Sheet Name:')
     recipe_sheet_name = str(recipe_sheet_name)
-    stock_in_data = st.file_uploader("📥 Stock-In Data", type = 'csv')
+    stock_in_data = st.file_uploader("📥 Invoice Details Report", type = 'csv')
     category_exclusions = st.text_input('Categories to exclude from Stock-In (Comma-Separated):')
     category_exclusions = str(category_exclusions) 
-    existing_inventory = st.file_uploader("📥 Starting Balance", type = 'csv')
-    corrected_stock_in_data = st.file_uploader("📥 Corrected Stock-In Data", type = 'csv')
-    matched_ingredients_stock_in_amended = st.file_uploader("📥 Amended Ingredients to Stock-In Report", type = 'csv')
-    matched_recipe_pos_amended = st.file_uploader("📥 Amended Recipe items to POS Report", type = 'csv')
+    matched_ingredients_stock_in_amended = st.file_uploader("📥 Amended Ingredients to Invoice Crosswalk", type = 'csv')
+    matched_recipe_pos_amended = st.file_uploader("📥 Amended Recipe items to POS Crosswalk", type = 'csv')
+    matched_invoice_unit_sizes = st.file_uploader("📥 Amended Ordered Items' Unit Sizes", type = 'csv')
     submit_button = st.form_submit_button(label='Submit')
 
 
@@ -101,7 +100,7 @@ def quantity_conversion(x):
     elif x['Unit of Measurement'] in spoon_multiplier:
         m = float(x['Quantity']) * 15
     elif x['Unit of Measurement'] in soda_multiplier:
-        m = float(x['Quantity']) * 330
+        m = float(x['Quantity']) * 300
     else:
         m = x['Quantity']
     return m
@@ -183,11 +182,13 @@ def unit_price_adjustment(x):
     x = float(x)
     return x
 
-def est_bal_adj(x):
-    quantity_consumed = x['Quantity Consumed']
-    if x['Estimated Balance'] < 0:
-        quantity_consumed = x['Qty'] * x['Unit Size']
-    return quantity_consumed
+# =============================================================================
+# def est_bal_adj(x):
+#     quantity_consumed = x['Quantity Consumed']
+#     if x['Estimated Balance'] < 0:
+#         quantity_consumed = x['Qty'] * x['Unit Size']
+#     return quantity_consumed
+# =============================================================================
 
 st.markdown('---')
 
@@ -213,7 +214,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     all_pos_cleaned['Article'] = all_pos_cleaned.loc[:,'Article'].str.upper()
     
     # total revenue
-    all_pos_cleaned = all_pos_cleaned.rename(columns = {'Net revenue w/o discount': 'Revenue'})
+    all_pos_cleaned = all_pos_cleaned.rename(columns = {'Net revenue': 'Revenue'})
     all_revenue = all_pos_cleaned['Revenue'].sum()
 
     
@@ -250,6 +251,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         batch = True
     except: 
         print ('No batched recipes detected.')
+        batch = False
     
     del recipe_data
     
@@ -378,61 +380,26 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     stock_in_agg.drop('Unit Price', axis = 1, inplace = True)
     stock_in_agg = stock_in_agg.groupby(['Product Name', 'Unit', 'Unit Size']).sum()
     stock_in_agg = stock_in_agg.reset_index()
-    
-    # preparing stock-in report for export
-    ## require cost managers to input the unit size etc    
-    stock_in_agg = stock_in_agg.rename(columns = {
-            'Product Name': 'Product Ordered'
-            })       
-   
-    # import existing inventory data
-    if existing_inventory is not None:
-        existing_inventory_df = pd.read_csv(existing_inventory, encoding = 'utf-8')
-        existing_inventory_df = existing_inventory_df.fillna(0)
-        existing_inventory_df = existing_inventory_df[['Product Name', 'Qty', 'Est Total Cost', 'Estimated Balance', 'Unit Size']].copy()
-        existing_inventory_df['Est Total Cost'] = existing_inventory_df['Est Total Cost']/existing_inventory_df['Qty'] * existing_inventory_df['Estimated Balance']/existing_inventory_df['Unit Size']
-        existing_inventory_df = existing_inventory_df.rename(columns = {
-            'Est Total Cost': 'Existing Cost',
-            'Estimated Balance': 'Existing Actual Balance'
-            })
-        existing_inventory_df = existing_inventory_df[['Product Name', 'Existing Cost', 'Existing Actual Balance']].copy()
-        stock_in_agg_final = stock_in_agg.merge(existing_inventory_df, on = 'Product Name', how = 'outer')
-        stock_in_agg_final = stock_in_agg_final.fillna(0)
-        stock_in_agg_final['Qty_Adj'] = round(stock_in_agg_final['Existing Actual Balance']/stock_in_agg_final['Unit Size'], 2)
-        stock_in_agg_final = stock_in_agg_final.fillna(0)
-        stock_in_agg_final['Qty_Adj'] = stock_in_agg_final['Qty_Adj'].replace(np.nan, 0) 
-        stock_in_agg_final['Qty'] = stock_in_agg_final['Qty_Adj'] + stock_in_agg_final['Qty']
-        stock_in_agg_final['Est Total Cost'] = round(stock_in_agg_final['Est Total Cost'] + stock_in_agg_final['Existing Cost'], 2)
-        stock_in_agg_final = stock_in_agg_final[['Product Name', 'Qty', 'Est Total Cost', 'Unit Size']]
-        # new_cols_list = ['Transfers', 'Estimated Wastage']
-        # stock_in_agg_final = stock_in_agg_final.reindex(columns = [*stock_in_agg_final.columns.tolist(), *new_cols_list])
-        
-    if existing_inventory is None:
-        # new_cols_list = ['Transfers', 'Estimated Wastage']
-        # stock_in_agg_final = stock_in_agg.reindex(columns = [*stock_in_agg.columns.tolist(), *new_cols_list])
-        stock_in_agg_final = stock_in_agg.copy()
-        
+              
     # remove rows with empty values
-    stock_in_agg_final = stock_in_agg_final.loc[stock_in_agg_final['Product Name'] != '']       
+    stock_in_agg = stock_in_agg.loc[stock_in_agg['Product Name'] != '']       
                
-    # allow for corrected stock in data to be uploaded
-    if corrected_stock_in_data is not None:
-        corrected_stock_in_data_df = pd.read_csv(corrected_stock_in_data, encoding = 'utf-8')
-        corrected_stock_in_data_df = corrected_stock_in_data_df.fillna(0)
+    # allow for corrected unit size dictionary to be uploaded
+    if matched_invoice_unit_sizes is not None:
+        matched_invoice_unit_sizes_df = pd.read_csv(matched_invoice_unit_sizes, encoding = 'utf-8')
+        matched_invoice_unit_sizes_df = matched_invoice_unit_sizes_df.fillna(0)
     
         # replace unit size 
-        corrected_unit_size = corrected_stock_in_data_df[['Product Name', 'Unit Size']]
-        corrected_unit_size = corrected_unit_size.rename(columns = {'Unit Size': 'Corrected Unit Size'})
-        stock_in_agg_final = stock_in_agg_final.merge(corrected_unit_size, on = 'Product Name')
-        stock_in_agg_final.drop('Unit Size', axis = 1, inplace = True)
-        stock_in_agg_final = stock_in_agg_final.rename(columns = {'Corrected Unit Size': 'Unit Size'})
-        stock_in_agg_margin = stock_in_agg_final.copy()
+        matched_invoice_unit_sizes_df = matched_invoice_unit_sizes_df.rename(columns = {'Unit Size': 'Corrected Unit Size'})
+        stock_in_agg = stock_in_agg.merge(matched_invoice_unit_sizes_df, on = 'Product Name')
+        stock_in_agg.drop('Unit Size', axis = 1, inplace = True)
+        stock_in_agg = stock_in_agg.rename(columns = {'Corrected Unit Size': 'Unit Size'})
+        stock_in_agg_margin = stock_in_agg.copy()
         
-
-    
-    # in the event that corrected stock in data is not uploaded, the tool should be allowed to continue 
-    if corrected_stock_in_data is None:
-        stock_in_agg_margin = stock_in_agg_final.copy()
+   
+    # in the event that corrected unit size dictionary is not uploaded, the tool should be allowed to continue 
+    if matched_invoice_unit_sizes is None:
+        stock_in_agg_margin = stock_in_agg.copy()
 
             
     
@@ -442,9 +409,12 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     stock_in_agg_margin['productname_cleaned'] = stock_in_agg_margin['Product Name'].apply(lambda x: names_cleaning(str(x))) 
     
     # creating a dictionary of product names
-    product_name_dictionary = stock_in_agg_margin[['productname_cleaned', 'Product Name']].copy()
+    product_name_dictionary = stock_in_agg_margin[['productname_cleaned', 'Product Name', 'Unit Size']].copy()
     product_name_dictionary = product_name_dictionary.drop_duplicates()
     unique_product_names = product_name_dictionary['productname_cleaned'].drop_duplicates().tolist()
+    
+    # product name and unit size dictionary to be exported
+    product_name_dictionary2 = product_name_dictionary[['Product Name', 'Unit Size']]
         
     # total cost
     total_stock_in_cost = stock_in_agg_margin['Est Total Cost'].sum()
@@ -482,8 +452,6 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     matched_ingredients_stock_in_df.drop('productname_cleaned', axis = 1, inplace = True)
     matched_ingredients_stock_in_df = matched_ingredients_stock_in_df[['Product Name', 'Ingredient']]
         
-
-### CHECKING STOPPED HERE
 
     # allow the tool to go on without amended crosswalks    
     if matched_ingredients_stock_in_amended is None and matched_recipe_pos_amended is None:
@@ -569,12 +537,22 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
                                                       right_on = 'Article')
     
     if matched_ingredients_stock_in_amended is not None and matched_recipe_pos_amended is not None:
-        matched_ingredients_stock_in_amended_df = pd.read_csv(matched_ingredients_stock_in_amended, encoding = '1252')
-        matched_recipe_pos_amended_df = pd.read_csv(matched_recipe_pos_amended, encoding = '1252')
+        matched_ingredients_stock_in_amended_df = pd.read_csv(matched_ingredients_stock_in_amended, encoding = 'utf-8')
+        matched_recipe_pos_amended_df = pd.read_csv(matched_recipe_pos_amended, encoding = 'utf-8')
         
+        matched_ingredients_list = matched_ingredients_stock_in_amended_df['Product Name'].drop_duplicates().tolist()
+        new_items = matched_ingredients_stock_in_df.loc[~matched_ingredients_stock_in_df['Product Name'].isin(matched_ingredients_list),]
+        matched_ingredients_stock_in_amended_df = pd.concat([matched_ingredients_stock_in_amended_df, new_items])
+        matched_ingredients_stock_in_amended_df.reset_index(inplace = True, drop = True)
+        
+        matched_pos_list = matched_recipe_pos_amended_df['POS Items'].drop_duplicates().tolist()
+        new_pos_items = matched_recipe_pos_amended_df.loc[~matched_recipe_pos_amended_df['POS Items'].isin(matched_pos_list),]
+        matched_recipe_pos_amended_df = pd.concat([matched_recipe_pos_amended_df, new_pos_items])
+        matched_recipe_pos_amended_df.reset_index(inplace = True, drop = True)
        
         # find out items ordered during the period 
         pos_sheet_cleaned_ordered = pos_sheet_df[['Article', 'Number of articles']]
+        pos_sheet_cleaned_ordered['Article'] = pos_sheet_cleaned_ordered['Article'].str.upper()
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered.merge(matched_recipe_pos_amended_df, left_on = 'Article', right_on = 'POS Items')
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered[['Article', 'Number of articles', 'Recipe Items']]
         
@@ -595,7 +573,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         # get items that cannot be matched to recipes
         unmatched = matched_ingredients_stock_in_amended_df.loc[matched_ingredients_stock_in_amended_df.Ingredient.isna(),]
         unmatched = unmatched.merge(stock_in_agg_margin)
-        unmatched = unmatched[['Product Ordered','Qty', 'Est Total Cost']]
+        unmatched = unmatched[['Product Name','Qty', 'Est Total Cost']]
     
         
         # get pos items that cannot be matched properly
@@ -666,7 +644,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
                                                       left_on = 'POS Items',
                                                       right_on = 'Article')
         
-        
+        summarized_cost_calculation = summarized_cost_calculation.rename(columns = {
+            'mean_constituent_cost': 'Cost of Ingredient'
+            })
         
        
     # merge with recipes df to get all components
@@ -693,12 +673,12 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     inventory_tracking = inventory_tracking.merge(stock_in_agg_margin, how = 'right')
     inventory_tracking['Quantity Consumed'] = inventory_tracking['Quantity Consumed'].fillna(0)
        
-    ## get estimated balance
-    inventory_tracking['Estimated Balance'] = (inventory_tracking['Qty'] * inventory_tracking['Unit Size']) - inventory_tracking['Quantity Consumed']
-    inventory_tracking['Quantity Consumed'] = inventory_tracking.apply(est_bal_adj, axis = 1)
-    inventory_tracking['Cost of Quantity Consumed'] = (inventory_tracking['Quantity Consumed'] / (inventory_tracking['Qty'] * inventory_tracking['Unit Size'])) * inventory_tracking['Est Total Cost']
-    inventory_tracking.replace(np.inf, 0, inplace=True)
-    inventory_tracking = inventory_tracking.fillna(0)    
+    # # get estimated balance
+    # inventory_tracking['Estimated Balance'] = (inventory_tracking['Qty'] * inventory_tracking['Unit Size']) - inventory_tracking['Quantity Consumed']
+    # inventory_tracking['Quantity Consumed'] = inventory_tracking.apply(est_bal_adj, axis = 1)
+    # inventory_tracking['Cost of Quantity Consumed'] = (inventory_tracking['Quantity Consumed'] / (inventory_tracking['Qty'] * inventory_tracking['Unit Size'])) * inventory_tracking['Est Total Cost']
+    # inventory_tracking.replace(np.inf, 0, inplace=True)
+    # inventory_tracking = inventory_tracking.fillna(0)    
         
     ## continuing cost calculation 
         
@@ -711,92 +691,90 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     # obtaining margin
     cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.assign(
-        Revenue = lambda w: round(w.Revenue/w.Quantity,2),
-        cost_pct = lambda y: round(100*(y.mean_constituent_cost/y.Revenue),2),
-        margin = lambda x: round(100*(1-x.mean_constituent_cost/x.Revenue),2)
+        cost_pct = lambda y: round(100*(y.mean_constituent_cost/(y.Revenue/y.Quantity)),2),
+        margin = lambda x: round(100*(1-x.mean_constituent_cost/(x.Revenue/x.Quantity)),2),
+        tfc = lambda z: round(z.mean_constituent_cost*z.Quantity, 2)
         )
     
     cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.dropna()
     cost_of_goods_sold_narrow.replace(-np.inf, 0, inplace = True)
     
     cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.rename(columns = {
-        'mean_constituent_cost': 'Cost Per Sale',
-        'Revenue': 'Revenue Per Sale',
+        'mean_constituent_cost': 'Food Cost per Unit',
+        'Revenue': 'Total Revenue',
         'margin': 'Profit Margin Pct',
-        'cost_pct': 'Cost of Production Pct'
+        'cost_pct': 'Food Cost Pct',
+        'Quantity': 'Quantity Sold',
+        'tfc': 'Theoretical Food Cost'
         })
+    
+    cost_of_goods_sold_narrow = cost_of_goods_sold_narrow[['Article', 'Quantity Sold', 'Total Revenue', 'Theoretical Food Cost', 'Food Cost per Unit', 'Food Cost Pct', 'Profit Margin Pct']]
     
     cost_of_goods_sold_narrow.replace(np.inf, 0, inplace = True)
     cost_of_goods_sold_narrow.replace(-np.inf, 0, inplace = True)
     
-    # calculate weighted ROI on ingredient
-    cost_of_goods_sold = cost_of_goods_sold.assign(
-        unit_revenue = lambda x: x.Revenue/x.Quantity
-        )
+# =============================================================================
+#     # calculate weighted ROI on ingredient
+#     cost_of_goods_sold = cost_of_goods_sold.assign(
+#         unit_revenue = lambda x: x.Revenue/x.Quantity
+#         )
+#     
+#     summarized_cost_calculation = summarized_cost_calculation.merge(cost_of_goods_sold[['POS Items', 'unit_revenue']],
+#                                                                     left_on = 'Food Item (As per POS system)',
+#                                                                     right_on = 'POS Items'
+#                                                                     )
+#     
+#     summarized_cost_calculation = summarized_cost_calculation.assign(
+#         constituent_revenue = lambda x: x.unit_revenue * x.Quantity
+#         )
+#     summarized_cost_calculation = summarized_cost_calculation.merge(all_pos_cleaned[['Article', 'Number of articles']],
+#                                                                     left_on = 'Food Item (As per POS system)',
+#                                                                     right_on = 'Article'
+#                                                                     )
+#     summarized_cost_calculation = summarized_cost_calculation.drop_duplicates()
+#     summarized_cost_calculation = summarized_cost_calculation.assign(
+#         total_constituent_revenue = lambda x: x.constituent_revenue *  x['Number of articles']
+#         )
+#         
+#     ingredient_revenue = summarized_cost_calculation.groupby('Ingredient').sum()
+#     ingredient_revenue = ingredient_revenue.reset_index()
+#     ingredient_revenue = ingredient_revenue[['Ingredient', 'total_constituent_revenue']]
+# 
+#     if matched_ingredients_stock_in_amended is not None and matched_recipe_pos_amended is not None:    
+#         ingredient_revenue = ingredient_revenue.merge(matched_ingredients_stock_in_amended_df)        
+#     
+#     if matched_ingredients_stock_in_amended is None and matched_recipe_pos_amended is None:    
+#         ingredient_revenue = ingredient_revenue.merge(matched_ingredients_stock_in_df)
+#         
+#     ingredient_revenue = ingredient_revenue[['Product Ordered', 'total_constituent_revenue']].copy()
+#     ingredient_revenue = ingredient_revenue.rename(columns = {
+#         'Product Ordered': 'Product Ordered',
+#         'total_constituent_revenue': 'Attributable Revenue'
+#         })
+# 
+#         
+#     # adding weighted ROI per ingredient to inventory tracking 
+#     inventory_tracking = inventory_tracking.merge(ingredient_revenue, on = 'Product Name', how = 'left')
+#     inventory_tracking = inventory_tracking.assign(
+#         ProfitMargin = lambda x: round(100 * (1- (x['Cost of Quantity Consumed']/x['Attributable Revenue'])), 2),
+#         CostMargin = lambda y: round(100 * (y['Cost of Quantity Consumed']/y['Attributable Revenue']), 2),
+#         QuantityStockedIn = lambda z: z['Unit Size'] * z['Qty']
+#         )
+#     inventory_tracking = inventory_tracking.rename(columns = {
+#         'QuantityStockedIn': 'Quantity Stocked In',
+#         'ProfitMargin': 'Profit Margin',
+#         'CostMargin': 'Cost Margin'
+#         })
+# =============================================================================
     
-    summarized_cost_calculation = summarized_cost_calculation.merge(cost_of_goods_sold[['POS Items', 'unit_revenue']],
-                                                                    left_on = 'Food Item (As per POS system)',
-                                                                    right_on = 'POS Items'
-                                                                    )
-    
-    summarized_cost_calculation = summarized_cost_calculation.assign(
-        constituent_revenue = lambda x: x.unit_revenue * x.Quantity
-        )
-    summarized_cost_calculation = summarized_cost_calculation.merge(all_pos_cleaned[['Article', 'Number of articles']],
-                                                                    left_on = 'Food Item (As per POS system)',
-                                                                    right_on = 'Article'
-                                                                    )
-    summarized_cost_calculation = summarized_cost_calculation.drop_duplicates()
-    summarized_cost_calculation = summarized_cost_calculation.assign(
-        total_constituent_revenue = lambda x: x.constituent_revenue *  x['Number of articles']
-        )
-        
-    ingredient_revenue = summarized_cost_calculation.groupby('Ingredient').sum()
-    ingredient_revenue = ingredient_revenue.reset_index()
-    ingredient_revenue = ingredient_revenue[['Ingredient', 'total_constituent_revenue']]
-
-    if matched_ingredients_stock_in_amended is not None and matched_recipe_pos_amended is not None:    
-        ingredient_revenue = ingredient_revenue.merge(matched_ingredients_stock_in_amended_df)        
-    
-    if matched_ingredients_stock_in_amended is None and matched_recipe_pos_amended is None:    
-        ingredient_revenue = ingredient_revenue.merge(matched_ingredients_stock_in_df)
-        
-    ingredient_revenue = ingredient_revenue[['Product Ordered', 'total_constituent_revenue']].copy()
-    ingredient_revenue = ingredient_revenue.rename(columns = {
-        'Product Ordered': 'Product Ordered',
-        'total_constituent_revenue': 'Attributable Revenue'
-        })
-
-        
-    # adding weighted ROI per ingredient to inventory tracking 
-    inventory_tracking = inventory_tracking.merge(ingredient_revenue, on = 'Product Name', how = 'left')
-    inventory_tracking = inventory_tracking.assign(
-        ProfitMargin = lambda x: round(100 * (1- (x['Cost of Quantity Consumed']/x['Attributable Revenue'])), 2),
-        CostMargin = lambda y: round(100 * (y['Cost of Quantity Consumed']/y['Attributable Revenue']), 2),
-        QuantityStockedIn = lambda z: z['Unit Size'] * z['Qty']
-        )
-    inventory_tracking = inventory_tracking.rename(columns = {
-        'QuantityStockedIn': 'Quantity Stocked In',
-        'ProfitMargin': 'Profit Margin',
-        'CostMargin': 'Cost Margin'
-        })
-    
-    inventory_tracking = inventory_tracking[['Product Name', 'Qty', 'Unit Size', 'Quantity Stocked In', 'Unit of Measurement', 'Quantity Consumed', 'Estimated Balance', 'Est Total Cost', 'Cost of Quantity Consumed', 'Attributable Revenue', 'Profit Margin', 'Cost Margin']]
+#    inventory_tracking = inventory_tracking[['Product Name', 'Qty', 'Unit Size', 'Quantity Stocked In', 'Unit of Measurement', 'Quantity Consumed', 'Estimated Balance', 'Est Total Cost', 'Cost of Quantity Consumed', 'Attributable Revenue', 'Profit Margin', 'Cost Margin']]
     inventory_tracking = inventory_tracking.fillna(0)
     inventory_tracking.replace(np.inf, 0, inplace = True)
     inventory_tracking.replace(-np.inf, 0, inplace = True)
     inventory_tracking = inventory_tracking.drop_duplicates()
+       
     
-    # # uom conversion
-    # common_uoms = ['KG', 'GMS', 'LTR', 'KGS', 'GM', 'CL', 'LT', 'L', 'C', 'GRAMS', 'G', 'KS', 'CS', 'GMS', 'KGS']
-    # common_uoms_equivalent = ['GR', 'GR', 'ML', 'GR', 'GR', 'ML', 'ML', 'ML', 'ML', 'GR', 'GR', 'GR', 'ML', 'GR', 'GR']
-    
-    # for uom in range(len(common_uoms)):
-    #     inventory_tracking.loc[inventory_tracking['Unit of Measurement'].str.contains(common_uoms[uom]), 'Unit of Measurement'] = common_uoms_equivalent[uom]
-    
-    
-    
-    total_cogs = round(inventory_tracking['Cost of Quantity Consumed'].sum(),2)
+    total_cogs = round(cost_of_goods_sold_narrow['Theoretical Food Cost'].sum(),2)
     total_stockin_cost = round(inventory_tracking['Est Total Cost'].sum(),2)  
     total_cogs_pct = round(100*total_cogs/all_revenue, 2)
     total_stockin_cost = round(inventory_tracking['Est Total Cost'].sum(),2)
@@ -811,16 +789,29 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
     # download buttons
     if st.button('Download Crosswalks as CSV'):
-        # ingredients_stock_in xwalk
-        tmp_download_link1a = download_link(matched_ingredients_stock_in_df, 'ingredients_stockin.csv', 'Click here to download your file matching Ingredients to Stock-In Report!')
-        st.markdown(tmp_download_link1a, unsafe_allow_html=True)
-        # recipe_pos xwalk
-        tmp_download_link1b = download_link(matched_recipe_pos_df, 'recipe_pos.csv', 'Click here to download your file matching Recipe items to POS Report!')
-        st.markdown(tmp_download_link1b, unsafe_allow_html=True)
+        if matched_ingredients_stock_in_amended is not None and matched_recipe_pos_amended is not None:
+            # ingredients_stock_in xwalk
+            tmp_download_link1a = download_link(matched_ingredients_stock_in_amended_df, 'ingredients_stockin.csv', 'Click here to download your Ingredients to Stock-In Crosswalk!')
+            st.markdown(tmp_download_link1a, unsafe_allow_html=True)
+            # recipe_pos xwalk
+            tmp_download_link1b = download_link(matched_recipe_pos_amended_df, 'recipe_pos.csv', 'Click here to download your Recipe items to POS Crosswalk!')
+            st.markdown(tmp_download_link1b, unsafe_allow_html=True)
+        else:
+            # ingredients_stock_in xwalk
+            tmp_download_link1a = download_link(matched_ingredients_stock_in_df, 'ingredients_stockin.csv', 'Click here to download your Ingredients to Stock-In Crosswalk!')
+            st.markdown(tmp_download_link1a, unsafe_allow_html=True)
+            # recipe_pos xwalk
+            tmp_download_link1b = download_link(matched_recipe_pos_df, 'recipe_pos.csv', 'Click here to download your Recipe items to POS Crosswalk!')
+            st.markdown(tmp_download_link1b, unsafe_allow_html=True)
+        # stock in unit size
+        tmp_download_link1c = download_link(product_name_dictionary2, 'invoice_details_unit_size.csv', 'Click here to download your Unit Size of Items Ordered Report!')
+        st.markdown(tmp_download_link1c, unsafe_allow_html=True)
         
-    if st.button('Download Inventory Report as CSV'):
-        tmp_download_link3 = download_link(inventory_tracking, 'final_inventory.csv', 'Click here to download your Inventory Report!')
-        st.markdown(tmp_download_link3, unsafe_allow_html=True)
+# =============================================================================
+#     if st.button('Download Inventory Report as CSV'):
+#         tmp_download_link3 = download_link(inventory_tracking, 'final_inventory.csv', 'Click here to download your Inventory Report!')
+#         st.markdown(tmp_download_link3, unsafe_allow_html=True)
+# =============================================================================
 
            
     if matched_ingredients_stock_in_amended is not None and matched_recipe_pos_amended is not None:        
@@ -835,62 +826,65 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     if st.button('Download Margin Report as CSV'):
         tmp_download_link6 = download_link(cost_of_goods_sold_narrow, 'menu_items_margins.csv', 'Click here to download your Profit Margin (Menu Item) Report!')
         st.markdown(tmp_download_link6, unsafe_allow_html = True)
+        tmp_download_link7 = download_link(summarized_cost_calculation, 'recipe_with_cost_of_ingredients.csv', 'Click here to download your Recipe Report with cost of ingredients!')
+        st.markdown(tmp_download_link7, unsafe_allow_html = True)
         
             
-    if corrected_stock_in_data is not None:
-        
-        corrected_stock_in_data_df_transformed = corrected_stock_in_data_df.copy()
-        corrected_stock_in_data_df_transformed = corrected_stock_in_data_df_transformed.rename(columns = {
-            'Quantity Stocked In': 'QuantityStockedIn',
-            'Quantity Consumed': 'QuantityConsumed',
-            'Cost of Quantity Consumed': 'CostofQuantityConsumed',
-            'Cost of Estimated Balance': 'CostofEstimatedBalance'
-            })
-        
-        
-        corrected_stock_in_data_df_transformed = corrected_stock_in_data_df_transformed.assign(
-            QuantityStockedIn = lambda w: w['Qty'] * w['Unit Size'],
-            QuantityConsumed = lambda x: x['QuantityStockedIn'] - x['Estimated Balance'],
-            CostofQuantityConsumed = lambda y: round(y['Est Total Cost'] * y['QuantityConsumed']/y['QuantityStockedIn'], 2),
-            CostofEstimatedBalance = lambda z: z['Est Total Cost'] - z['CostofQuantityConsumed']
-            )
-        
-        corrected_stock_in_data_df_transformed = corrected_stock_in_data_df_transformed.rename(columns = {
-            'QuantityStockedIn': 'Quantity Stocked In',
-            'QuantityConsumed': 'Quantity Consumed',
-            'CostofQuantityConsumed': 'Cost of Quantity Consumed',
-            'CostofEstimatedBalance': 'Cost of Estimated Balance'
-            })
-        
-        if st.button('Download Corrected Inventory Reports as CSV'):
-            tmp_download_link7 = download_link(corrected_stock_in_data_df_transformed, 'corrected_final_inventory.csv', 'Click here to download your Final Inventory Report!')
-            st.markdown(tmp_download_link7, unsafe_allow_html=True)
-        
-        # rewrite revenue printout
-        total_cogs = sum(corrected_stock_in_data_df_transformed['Cost of Quantity Consumed'])
-        st.write("Total Revenue")
-        st.write(all_revenue)
-        st.write("Cost of Ingredients Sold")
+# =============================================================================
+#     if corrected_stock_in_data is not None:
+#         
+#         corrected_stock_in_data_df_transformed = corrected_stock_in_data_df.copy()
+#         corrected_stock_in_data_df_transformed = corrected_stock_in_data_df_transformed.rename(columns = {
+#             'Quantity Stocked In': 'QuantityStockedIn',
+#             'Quantity Consumed': 'QuantityConsumed',
+#             'Cost of Quantity Consumed': 'CostofQuantityConsumed',
+#             'Cost of Estimated Balance': 'CostofEstimatedBalance'
+#             })
+#         
+#         
+#         corrected_stock_in_data_df_transformed = corrected_stock_in_data_df_transformed.assign(
+#             QuantityStockedIn = lambda w: w['Qty'] * w['Unit Size'],
+#             QuantityConsumed = lambda x: x['QuantityStockedIn'] - x['Estimated Balance'],
+#             CostofQuantityConsumed = lambda y: round(y['Est Total Cost'] * y['QuantityConsumed']/y['QuantityStockedIn'], 2),
+#             CostofEstimatedBalance = lambda z: z['Est Total Cost'] - z['CostofQuantityConsumed']
+#             )
+#         
+#         corrected_stock_in_data_df_transformed = corrected_stock_in_data_df_transformed.rename(columns = {
+#             'QuantityStockedIn': 'Quantity Stocked In',
+#             'QuantityConsumed': 'Quantity Consumed',
+#             'CostofQuantityConsumed': 'Cost of Quantity Consumed',
+#             'CostofEstimatedBalance': 'Cost of Estimated Balance'
+#             })
+#         
+#         if st.button('Download Corrected Inventory Reports as CSV'):
+#             tmp_download_link7 = download_link(corrected_stock_in_data_df_transformed, 'corrected_final_inventory.csv', 'Click here to download your Final Inventory Report!')
+#             st.markdown(tmp_download_link7, unsafe_allow_html=True)
+#         
+#         # rewrite revenue printout
+#         total_cogs = sum(corrected_stock_in_data_df_transformed['Cost of Quantity Consumed'])
+#         st.write("Total Revenue")
+#         st.write(all_revenue)
+#         st.write("Cost of Ingredients Sold")
+#         st.write(total_cogs)
+#         st.write('Costs as % of Revenue')
+#         aggregated_margin = round(100*total_cogs/all_revenue, 2)
+#         st.write(aggregated_margin)
+# =============================================================================
+    
+    # show aggregated margins
+    st.write("Total Revenue")
+    st.write(all_revenue)
+    st.write("Cost of Ingredients Sold")
+    if total_cogs > total_stock_in_cost:
+        st.write(total_stock_in_cost)
+        st.write('Costs as % of Revenue')
+        aggregated_margin = round(100*total_stock_in_cost/all_revenue, 2)
+        st.write(aggregated_margin)
+    else:
         st.write(total_cogs)
         st.write('Costs as % of Revenue')
         aggregated_margin = round(100*total_cogs/all_revenue, 2)
         st.write(aggregated_margin)
-    
-    else:
-         # show aggregated margins
-        st.write("Total Revenue")
-        st.write(all_revenue)
-        st.write("Cost of Ingredients Sold")
-        if total_cogs > total_stock_in_cost:
-            st.write(total_stock_in_cost)
-            st.write('Costs as % of Revenue')
-            aggregated_margin = round(100*total_stock_in_cost/all_revenue, 2)
-            st.write(aggregated_margin)
-        else:
-            st.write(total_cogs)
-            st.write('Costs as % of Revenue')
-            aggregated_margin = round(100*total_cogs/all_revenue, 2)
-            st.write(aggregated_margin)
         
         
 
