@@ -573,7 +573,8 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         # get items that cannot be matched to recipes
         unmatched = matched_ingredients_stock_in_amended_df.loc[matched_ingredients_stock_in_amended_df.Ingredient.isna(),]
         unmatched = unmatched.merge(stock_in_agg_margin)
-        unmatched = unmatched[['Product Name','Qty', 'Est Total Cost']]
+        unmatched = unmatched[['Product Name', 'Unit', 'Qty', 'Est Total Cost']]
+        unmatched = unmatched.drop_duplicates()
     
         
         # get pos items that cannot be matched properly
@@ -693,7 +694,8 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.assign(
         cost_pct = lambda y: round(100*(y.mean_constituent_cost/(y.Revenue/y.Quantity)),2),
         margin = lambda x: round(100*(1-x.mean_constituent_cost/(x.Revenue/x.Quantity)),2),
-        tfc = lambda z: round(z.mean_constituent_cost*z.Quantity, 2)
+        tfc = lambda z: round(z.mean_constituent_cost*z.Quantity, 2),
+        mean_constituent_cost = lambda w: round(w.mean_constituent_cost, 2)
         )
     
     cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.dropna()
