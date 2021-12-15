@@ -215,7 +215,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
     # total revenue
     all_pos_cleaned = all_pos_cleaned.rename(columns = {'Net revenue': 'Revenue'})
-    all_revenue = all_pos_cleaned['Revenue'].sum()
+    all_revenue = round(all_pos_cleaned['Revenue'].sum(),2)
 
     
     # import recipe data
