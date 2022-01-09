@@ -182,6 +182,12 @@ def unit_price_adjustment(x):
     x = float(x)
     return x
 
+def unit_dict_accretion(x):
+    uploaded_unit = x['Corrected Unit Size']
+    if uploaded_unit == 0:
+        uploaded_unit = x['Unit Size']
+    return uploaded_unit
+
 # =============================================================================
 # def est_bal_adj(x):
 #     quantity_consumed = x['Quantity Consumed']
@@ -208,9 +214,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     del pos_data
     
     # remove all nonsensical values
-    pos_sheet_cleaned = pos_sheet_df.loc[(pos_sheet_df['Article']!= 'Total')&(pos_sheet_df['Number of articles']>0),]
-    pos_sheet_cleaned['Article'] = pos_sheet_cleaned.loc[:,'Article'].str.upper()
-    all_pos_cleaned = pos_sheet_df.loc[(pos_sheet_df['Article']!= 'Total'),]
+    # pos_sheet_cleaned = pos_sheet_df.loc[(pos_sheet_df['Article']!= 'Total')&(pos_sheet_df['Number of articles']>0),]
+    # pos_sheet_cleaned['Article'] = pos_sheet_cleaned.loc[:,'Article'].str.upper()
+    all_pos_cleaned = pos_sheet_df.loc[(pos_sheet_df['Article']!= 'Total'),].copy()
     all_pos_cleaned['Article'] = all_pos_cleaned.loc[:,'Article'].str.upper()
     
     # total revenue
@@ -221,6 +227,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # import recipe data
     recipe_sheet_df = pd.read_excel(recipe_data, sheet_name = recipe_sheet_name)
     recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
+    recipe_sheet_df['Food Item (As per POS system)'] = recipe_sheet_df['Food Item (As per POS system)'].apply(lambda x: x.rstrip())
     batch = True
     
     ### try to look for and import batched recipes
@@ -391,9 +398,11 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     
         # replace unit size 
         matched_invoice_unit_sizes_df = matched_invoice_unit_sizes_df.rename(columns = {'Unit Size': 'Corrected Unit Size'})
-        stock_in_agg = stock_in_agg.merge(matched_invoice_unit_sizes_df, on = 'Product Name')
-        stock_in_agg.drop('Unit Size', axis = 1, inplace = True)
-        stock_in_agg = stock_in_agg.rename(columns = {'Corrected Unit Size': 'Unit Size'})
+        stock_in_agg = stock_in_agg.merge(matched_invoice_unit_sizes_df, on = 'Product Name', how = 'left')
+        stock_in_agg['Corrected Unit Size'] = stock_in_agg['Corrected Unit Size'].fillna(0)
+        stock_in_agg['Accreted Unit Size'] = stock_in_agg.apply(unit_dict_accretion, axis = 1)
+        stock_in_agg.drop(['Unit Size', 'Corrected Unit Size'], axis = 1, inplace = True)
+        stock_in_agg = stock_in_agg.rename(columns = {'Accreted Unit Size': 'Unit Size'})
         stock_in_agg_margin = stock_in_agg.copy()
         
    
@@ -457,8 +466,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     if matched_ingredients_stock_in_amended is None and matched_recipe_pos_amended is None:
         
         # find out items ordered during the period 
-        pos_sheet_cleaned_ordered = pos_sheet_df[['Article', 'Number of articles']]
+        pos_sheet_cleaned_ordered = all_pos_cleaned[['Article', 'Number of articles']]
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered.merge(matched_recipe_pos_df, left_on = 'Article', right_on = 'POS Items')
+        pos_sheet_cleaned_ordered['Recipe Items'] = pos_sheet_cleaned_ordered['Recipe Items'].str.upper()
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered[['Article', 'Number of articles', 'Recipe Items']]
         
         # ingredient stock in crosswalk
@@ -546,14 +556,15 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         matched_ingredients_stock_in_amended_df.reset_index(inplace = True, drop = True)
         
         matched_pos_list = matched_recipe_pos_amended_df['POS Items'].drop_duplicates().tolist()
-        new_pos_items = matched_recipe_pos_amended_df.loc[~matched_recipe_pos_amended_df['POS Items'].isin(matched_pos_list),]
+        new_pos_items = matched_recipe_pos_df.loc[~matched_recipe_pos_df['POS Items'].isin(matched_pos_list),]
         matched_recipe_pos_amended_df = pd.concat([matched_recipe_pos_amended_df, new_pos_items])
         matched_recipe_pos_amended_df.reset_index(inplace = True, drop = True)
        
         # find out items ordered during the period 
-        pos_sheet_cleaned_ordered = pos_sheet_df[['Article', 'Number of articles']]
+        pos_sheet_cleaned_ordered = all_pos_cleaned[['Article', 'Number of articles']]
         pos_sheet_cleaned_ordered['Article'] = pos_sheet_cleaned_ordered['Article'].str.upper()
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered.merge(matched_recipe_pos_amended_df, left_on = 'Article', right_on = 'POS Items')
+        pos_sheet_cleaned_ordered['Recipe Items'] = pos_sheet_cleaned_ordered['Recipe Items'].str.upper()
         pos_sheet_cleaned_ordered = pos_sheet_cleaned_ordered[['Article', 'Number of articles', 'Recipe Items']]
         
         # ingredient stock in crosswalk
