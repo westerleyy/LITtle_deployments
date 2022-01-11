@@ -227,6 +227,8 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # import recipe data
     recipe_sheet_df = pd.read_excel(recipe_data, sheet_name = recipe_sheet_name)
     recipe_sheet_df = recipe_sheet_df.dropna(how = 'all')
+    recipe_sheet_df = recipe_sheet_df.dropna(subset = ['Food Item (As per POS system)'])
+    recipe_sheet_df = recipe_sheet_df.dropna(subset = ['Ingredient Ordered (if known)'])
     recipe_sheet_df['Food Item (As per POS system)'] = recipe_sheet_df['Food Item (As per POS system)'].apply(lambda x: x.rstrip())
     batch = True
     
