@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 24 October 2021
-Last updated on Tue, Dec 14, 2021
+Last updated on Jan 13, 2021
 
 
 Expo
@@ -698,7 +698,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
     ## slimming the DF down
     cost_of_goods_sold_narrow = cost_of_goods_sold[['Article', 'mean_constituent_cost', 'Revenue']].copy()
-    cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.merge(pos_sheet_cleaned_ordered[['Article', 'Number of articles']])
+    cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.merge(all_pos_cleaned[['Article', 'Number of articles', 'Revenue']])
     cost_of_goods_sold_narrow = cost_of_goods_sold_narrow.rename(columns = {
         'Number of articles': 'Quantity'
         })
