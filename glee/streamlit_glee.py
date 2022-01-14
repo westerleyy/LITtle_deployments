@@ -28,12 +28,18 @@ with st.form(key = 'upload_form'):
     pos_data = st.file_uploader("📥 POS ", type = 'xlsx')
     pos_sheet_name = st.text_input('POS Sheet Name:')
     pos_sheet_name = str(pos_sheet_name)
-    recipe_data = st.file_uploader("📥 Recipe Data", type = 'xlsx')
-    recipe_sheet_name = st.text_input('Recipe Data Sheet Name:')
-    recipe_sheet_name = str(recipe_sheet_name)
     stock_in_data = st.file_uploader("📥 Invoice Details Report", type = 'csv')
     category_exclusions = st.text_input('Categories to exclude from Stock-In (Comma-Separated):')
     category_exclusions = str(category_exclusions) 
+    month_option = st.selectbox(
+        'Which month do you want to run the analysis for?',
+        ('December', 'January', 'February', 'March')
+        )
+    month_option = str(month_option)
+    recipe_data = st.file_uploader("📥 Recipe Data", type = 'xlsx')
+    recipe_sheet_name = st.text_input('Recipe Data Sheet Name:')
+    recipe_sheet_name = str(recipe_sheet_name)
+
     matched_ingredients_stock_in_amended = st.file_uploader("📥 Amended Ingredients to Invoice Crosswalk", type = 'csv')
     matched_recipe_pos_amended = st.file_uploader("📥 Amended Recipe items to POS Crosswalk", type = 'csv')
     matched_invoice_unit_sizes = st.file_uploader("📥 Amended Ordered Items' Unit Sizes", type = 'csv')
@@ -166,9 +172,9 @@ def soda_multiplier(t):
 
 def drinks_unit_price_multiplier(d):
     multiplier = d['Unit Price']
-    if d['Upload Time'] < '2021-11-22' and (d['Category'] == 'Alcoholic Beverage' or d['Category'] == 'Beverage - Alcohol' or d['Category'] == 'Alcohol Beverage' or d['Category']== 'Alc Beverage'):
+    if d['Invoice Date'] < '2021-11-22' and (d['Category'] == 'Alcoholic Beverage' or d['Category'] == 'Beverage - Alcohol' or d['Category'] == 'Alcohol Beverage' or d['Category']== 'Alc Beverage'):
         multiplier = 1.3 * d['Unit Price']
-    elif d['Upload Time'] < '2021-11-22' and (d['Category'] == 'Non Alcoholic Beverage' or d['Category'] == 'Beverage - Non Alcohol' or d['Category'] == 'Beverage - Soft' or d['Category'] == 'Beverage  - Soft' or d['Category'] == 'N-Alc Beverage'):
+    elif d['Invoice Date'] < '2021-11-22' and (d['Category'] == 'Non Alcoholic Beverage' or d['Category'] == 'Beverage - Non Alcohol' or d['Category'] == 'Beverage - Soft' or d['Category'] == 'Beverage  - Soft' or d['Category'] == 'N-Alc Beverage'):
         multiplier_exclusion = re.search('JUICE|SYRUP', d['Product Name'])
         if multiplier_exclusion:
             multiplier = 1 * d['Unit Price']
@@ -187,6 +193,26 @@ def unit_dict_accretion(x):
     if uploaded_unit == 0:
         uploaded_unit = x['Unit Size']
     return uploaded_unit
+
+def month_dict_stock_in_filter(df, x = month_option):
+    x = str(x)
+    if x == "December":
+        start_date = '2021-12-01'
+        end_date = '2021-12-31'
+    elif x == "January":
+        start_date = '2022-01-01'
+        end_date = '2022-01-31'
+    elif x == "February":
+        start_date = '2022-02-01'
+        end_date = '2022-02-28'
+    elif x == "March":
+        start_date = '2022-03-01'
+        end_date = '2022-03-31'
+    df1 = df.loc[(df['Invoice Date'] >= start_date),]
+    return df1
+        
+    
+    
 
 # =============================================================================
 # def est_bal_adj(x):
@@ -347,8 +373,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         stock_in = stock_in[exclusions]
         del category_exclusions
     
-    # remove trailing white spaces, excessive whitespaces and other stuff
+    # remove trailing white spaces, excessive whitespaces and other stuff, remove those with empty values
     stock_in['Product Name'] = stock_in['Product Name'].apply(lambda x: x.rstrip())
+    stock_in = stock_in.loc[stock_in['Product Name'] != '']
 
     # extracting uoms and unit sizes
     # need to convert everything from kg to g, and ltr to ml
@@ -384,14 +411,14 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     stock_in.drop(['multiplier', 'soda_multiplier'], axis = 1, inplace = True)    
     
     # agg orders
-    stock_in_agg = stock_in[['Product Name', 'Qty', 'Unit', 'Unit Size',  'Unit Price']].copy()
-    stock_in_agg['Est Total Cost'] = stock_in_agg['Qty'] * stock_in_agg['Unit Price']
-    stock_in_agg.drop('Unit Price', axis = 1, inplace = True)
+    stock_in = stock_in[['Product Name', 'Qty', 'Unit', 'Unit Size',  'Unit Price', 'Invoice Date', 'Subtotal']].copy()
+    stock_in['Est Total Cost'] = stock_in['Qty'] * stock_in['Unit Price']
+    stock_in_agg = stock_in[['Product Name', 'Qty', 'Unit', 'Unit Size', 'Est Total Cost']].copy()
     stock_in_agg = stock_in_agg.groupby(['Product Name', 'Unit', 'Unit Size']).sum()
     stock_in_agg = stock_in_agg.reset_index()
               
     # remove rows with empty values
-    stock_in_agg = stock_in_agg.loc[stock_in_agg['Product Name'] != '']       
+           
                
     # allow for corrected unit size dictionary to be uploaded
     if matched_invoice_unit_sizes is not None:
@@ -427,8 +454,11 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
     # product name and unit size dictionary to be exported
     product_name_dictionary2 = product_name_dictionary[['Product Name', 'Unit Size']]
         
-    # total cost
-    total_stock_in_cost = stock_in_agg_margin['Est Total Cost'].sum()
+    # total cost filtered by the month
+    
+    stock_in_filtered = month_dict_stock_in_filter(df = stock_in)
+    stock_in_filtered['Subtotal'] = stock_in_filtered['Subtotal'].apply(lambda x: unit_price_adjustment(str(x)))
+    total_stock_in_cost = stock_in_filtered['Subtotal'].sum()
     
     ### Crosswalk 2: Recipe Ingredients to Stock-In Report
         
@@ -585,8 +615,9 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         # get items that cannot be matched to recipes
         unmatched = matched_ingredients_stock_in_amended_df.loc[matched_ingredients_stock_in_amended_df.Ingredient.isna(),]
-        unmatched = unmatched.merge(stock_in_agg_margin)
-        unmatched = unmatched[['Product Name', 'Unit', 'Qty', 'Est Total Cost']]
+        unmatched = unmatched.merge(stock_in_filtered)
+        unmatched = unmatched[['Product Name', 'Unit', 'Qty', 'Subtotal']]
+        unmatched.rename(columns = {'Subtotal': 'Cost'}, inplace = True)
         unmatched = unmatched.drop_duplicates()
     
         
