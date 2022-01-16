@@ -175,7 +175,7 @@ def drinks_unit_price_multiplier(d):
     if d['Invoice Date'] < '2021-11-22' and (d['Category'] == 'Alcoholic Beverage' or d['Category'] == 'Beverage - Alcohol' or d['Category'] == 'Alcohol Beverage' or d['Category']== 'Alc Beverage'):
         multiplier = 1.3 * d['Unit Price']
     elif d['Invoice Date'] < '2021-11-22' and (d['Category'] == 'Non Alcoholic Beverage' or d['Category'] == 'Beverage - Non Alcohol' or d['Category'] == 'Beverage - Soft' or d['Category'] == 'Beverage  - Soft' or d['Category'] == 'N-Alc Beverage'):
-        multiplier_exclusion = re.search('JUICE|SYRUP', d['Product Name'])
+        multiplier_exclusion = re.search('JUICE|SYRUP|AQU|SPARKLING', d['Product Name'])
         if multiplier_exclusion:
             multiplier = 1 * d['Unit Price']
         else:
@@ -615,7 +615,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         
         # get items that cannot be matched to recipes
         unmatched = matched_ingredients_stock_in_amended_df.loc[matched_ingredients_stock_in_amended_df.Ingredient.isna(),]
-        unmatched = unmatched.merge(stock_in_filtered)
+        unmatched = unmatched.merge(stock_in)
         unmatched = unmatched[['Product Name', 'Unit', 'Qty', 'Subtotal']]
         unmatched.rename(columns = {'Subtotal': 'Cost'}, inplace = True)
         unmatched = unmatched.drop_duplicates()
