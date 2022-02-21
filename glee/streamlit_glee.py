@@ -78,12 +78,13 @@ def quantity_replacement(x):
 
 def names_cleaning(x):
     x = x.upper()
+    x = x.rstrip()
     x = re.sub(r'\([^)]*\)', '', x)
-    sevenup_exception = re.search('7 UP|7UP', x)
+    sevenup_exception = re.search('7 UP|7UP|7-UP', x)
     if sevenup_exception:
         x = x
     else:
-        x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁ ]+", "", x)
+        x = re.sub("[^a-zA-ZéÉíÍóÓúÚáÁÂÈâËëâ ]+", "", x)
         x = ' '.join( [w for w in x.split() if len(w)>2] )
     return x
 
@@ -520,6 +521,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         if batch is True:
             batched_items = batch_volume['Food Item (As per POS system)'].drop_duplicates().tolist()
             batch_volume = batch_volume.rename(columns = {'Quantity': 'Servings Volume'})
+            recipe_ordered['Ingredient Ordered (if known)'] = recipe_ordered.loc[:,'Ingredient Ordered (if known)'].str.upper()
             batch_consumption = batch_volume.merge(recipe_ordered[['Food Item (As per POS system)', 'Ingredient Ordered (if known)', 'Quantity Consumed', 'Article', 'Number of articles', 'Recipe Items', 'Quantity']],
                                                    left_on = 'Food Item (As per POS system)',
                                                    right_on = 'Ingredient Ordered (if known)')
@@ -551,7 +553,7 @@ if pos_data is not None and recipe_data is not None and stock_in_data is not Non
         # calculate margins
         cost_calculation = recipe_ordered[['Food Item (As per POS system)', 'Ingredient', 'Quantity', 'Unit of Measurement']].copy()
         cost_calculation = cost_calculation.merge(matched_ingredients_stock_in_df, on = 'Ingredient')
-        cost_calculation = cost_calculation.merge(stock_in_agg_margin[['Product Ordered', 'unit_cost']], on = 'Product Ordered')
+        cost_calculation = cost_calculation.merge(stock_in_agg_margin[['Product Name', 'unit_cost']], on = 'Product Name')
         cost_calculation.replace(np.inf, 0, inplace = True)
                 
         # cost 
